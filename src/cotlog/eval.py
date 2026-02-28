@@ -193,17 +193,21 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
 
 
 def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: bool = False, model: str | None = None) -> dict:
-    """Run all examples using CoT verification."""
+    """Run all examples using CoT verification.
+
+    Reports verification statistics rather than accuracy — the CoT pipeline
+    checks internal consistency of the LLM's reasoning, not agreement with
+    gold labels.
+    """
     from .cot_verify import verify_cot
 
-    correct = 0
     total = 0
     errors = 0
     total_steps = 0
     verified_steps = 0
-    llm_answer_correct = 0
-    confusion: Counter[tuple[str, str]] = Counter()
-    mismatches: list[dict] = []
+    fully_verified = 0  # all steps + conclusion verified
+    conclusion_verified = 0  # conclusion proved from accumulated knowledge
+    total_rounds = 0
     records: list[dict] = []
 
     for i, ex in enumerate(examples):
@@ -217,22 +221,24 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
                 model=model, cpu_limit=cpu_limit,
             )
 
-            # Count step-level stats
+            total_rounds += result.rounds
+
             for step in result.steps:
                 total_steps += 1
                 if step.verified:
                     verified_steps += 1
 
-            # LLM's own answer accuracy
-            if result.llm_answer == ex.label:
-                llm_answer_correct += 1
+            if result.all_steps_verified and result.verified_label in ('True', 'False'):
+                fully_verified += 1
 
-            predicted = result.verified_label or 'Uncertain'
+            if result.verified_label in ('True', 'False'):
+                conclusion_verified += 1
 
             if verbose:
-                print(f"  [{i:3d}] Steps: {len(result.steps)}, "
-                      f"verified: {sum(1 for s in result.steps if s.verified)}/{len(result.steps)}, "
-                      f"llm_answer={result.llm_answer}, prover_label={predicted}")
+                n_verified = sum(1 for s in result.steps if s.verified)
+                print(f"  [{i:3d}] Steps: {n_verified}/{len(result.steps)} verified, "
+                      f"conclusion={result.verified_label}, "
+                      f"llm_answer={result.llm_answer}, rounds={result.rounds}")
                 for step in result.steps:
                     mark = 'V' if step.verified else 'X'
                     print(f"        [{mark}] Step {step.step_num}: {step.fol_str}")
@@ -241,29 +247,15 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
 
         except Exception as e:
             errors += 1
-            predicted = 'Error'
             error_msg = str(e)
             if verbose:
                 print(f"  [{i}] ERROR: {e}", file=sys.stderr)
 
         elapsed = time.monotonic() - t0
-        confusion[(ex.label, predicted)] += 1
-        is_correct = predicted == ex.label
-        if is_correct:
-            correct += 1
-        else:
-            mismatches.append({
-                'index': i,
-                'gold': ex.label,
-                'predicted': predicted,
-                'conclusion': ex.conclusion,
-            })
 
         record = {
             'index': i,
             'gold_label': ex.label,
-            'predicted_label': predicted,
-            'correct': is_correct,
             'conclusion': ex.conclusion,
             'premises': ex.premises,
             'error': error_msg,
@@ -273,22 +265,18 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
             record.update(result.to_record())
         records.append(record)
 
-    accuracy = correct / total if total > 0 else 0.0
     step_verification_rate = verified_steps / total_steps if total_steps > 0 else 0.0
-    llm_answer_accuracy = llm_answer_correct / total if total > 0 else 0.0
+    avg_rounds = total_rounds / total if total > 0 else 0.0
 
     return {
         'total': total,
-        'correct': correct,
         'errors': errors,
-        'accuracy': accuracy,
+        'fully_verified': fully_verified,
+        'conclusion_verified': conclusion_verified,
         'total_steps': total_steps,
         'verified_steps': verified_steps,
         'step_verification_rate': step_verification_rate,
-        'llm_answer_correct': llm_answer_correct,
-        'llm_answer_accuracy': llm_answer_accuracy,
-        'confusion': dict(confusion),
-        'mismatches': mismatches,
+        'avg_rounds': avg_rounds,
         'records': records,
     }
 
@@ -299,19 +287,17 @@ def print_report(results: dict, mode: str = 'gold') -> None:
     print(f"FOLIO Evaluation Report (mode={mode})")
     print(f"{'='*60}")
     print(f"Total:    {results['total']}")
-    print(f"Correct:  {results['correct']}")
     print(f"Errors:   {results['errors']}")
+
+    if mode == 'cot':
+        _print_cot_report(results)
+        return
+
+    print(f"Correct:  {results['correct']}")
     print(f"Accuracy: {results['accuracy']:.1%}")
 
     if mode == 'llm':
         print(f"Parse failures: {results.get('parse_failures', 0)}")
-
-    if mode == 'cot':
-        print(f"\nCoT Step-Level Stats:")
-        print(f"  Total steps:    {results['total_steps']}")
-        print(f"  Verified steps: {results['verified_steps']}")
-        print(f"  Step verify rate: {results['step_verification_rate']:.1%}")
-        print(f"  LLM answer accuracy: {results['llm_answer_accuracy']:.1%}")
 
     print()
 
@@ -337,6 +323,21 @@ def print_report(results: dict, mode: str = 'gold') -> None:
             print(f"  [{m['index']:3d}] gold={m['gold']:<10s} pred={m['predicted']:<10s} {detail}")
         if len(results['mismatches']) > 20:
             print(f"  ... and {len(results['mismatches']) - 20} more")
+
+
+def _print_cot_report(results: dict) -> None:
+    """Print CoT verification statistics."""
+    total = results['total']
+    print(f"\nVerification Summary:")
+    print(f"  Fully verified:      {results['fully_verified']}/{total}"
+          f"  ({results['fully_verified']/total:.0%})" if total else "")
+    print(f"  Conclusion verified: {results['conclusion_verified']}/{total}"
+          f"  ({results['conclusion_verified']/total:.0%})" if total else "")
+    print(f"\nStep-Level Stats:")
+    print(f"  Total steps:         {results['total_steps']}")
+    print(f"  Verified steps:      {results['verified_steps']}")
+    print(f"  Step verify rate:    {results['step_verification_rate']:.1%}")
+    print(f"  Avg rounds/example:  {results['avg_rounds']:.1f}")
 
 
 def write_results(results: dict, mode: str, output_dir: Path) -> None:
