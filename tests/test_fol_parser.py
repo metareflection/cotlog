@@ -115,3 +115,37 @@ def test_multiple_premises_parse():
     for p in premises:
         ast = parse_fol(p)
         assert ast is not None
+
+
+def test_dot_in_identifier():
+    """FOLIO uses dots in some constants like y42.3billion."""
+    ast = parse_fol("ValuedAt(yalesendowment, y42.3billion)")
+    assert isinstance(ast, Predicate)
+    assert ast.args[1] == Const("y42.3billion")
+
+
+def test_comma_as_conjunction():
+    """FOLIO sometimes uses comma as conjunction between formulas."""
+    s = "∀x ∀y (SuperheroMovie(x), NamedAfter(x, y) → GoodGuy(y))"
+    ast = parse_fol(s)
+    assert isinstance(ast, ForAll)
+    inner = ast.body
+    assert isinstance(inner, ForAll)
+    impl = inner.body
+    assert isinstance(impl, Implies)
+    assert isinstance(impl.left, And)
+
+
+def test_trailing_unmatched_paren():
+    """FOLIO data sometimes has trailing unmatched close parens."""
+    s = "Chaperone(bonnie) ⊕ TalentShows(bonnie) → AcademicCareer(bonnie) ∧ Inactive(bonnie))"
+    ast = parse_fol(s)
+    # Top-level is Xor (⊕ has lower precedence than →); key point: no parse error
+    assert isinstance(ast, Xor)
+
+
+def test_unbalanced_inner_paren():
+    """Missing open paren but trailing close — e.g. FOLIO example 108."""
+    s = "(Spill(peter) ∧ OnlyChild(peter)) ∨ ¬Spill(peter) ∧ ¬OnlyChild(peter))"
+    ast = parse_fol(s)
+    assert isinstance(ast, Or)

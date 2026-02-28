@@ -116,10 +116,10 @@ def tokenize(s: str) -> list[Token]:
             tokens.append(Token(_SYMBOL_MAP[ch], ch))
             i += 1
             continue
-        # Identifier: letters, digits, underscores, right single quote
+        # Identifier: letters, digits, underscores, right single quote, dots
         if ch.isalpha() or ch == '_':
             start = i
-            while i < len(s) and (s[i].isalnum() or s[i] == '_' or s[i] == '\u2019'):
+            while i < len(s) and (s[i].isalnum() or s[i] in ('_', '\u2019', '.')):
                 i += 1
             tokens.append(Token(TokType.IDENT, s[start:i]))
             continue
@@ -195,7 +195,7 @@ class Parser:
 
     def and_expr(self) -> Formula:
         left = self.unary()
-        while self.peek().type == TokType.AND:
+        while self.peek().type in (TokType.AND, TokType.COMMA):
             self.consume()
             right = self.unary()
             left = And(left, right)
@@ -262,7 +262,36 @@ def _classify_term(name: str) -> Term:
     return Const(name)
 
 
+def _fix_unbalanced_parens(s: str) -> str:
+    """Fix common FOLIO data errors: trailing unmatched close parens."""
+    depth = 0
+    last_valid = len(s)
+    for i, ch in enumerate(s):
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            if depth > 0:
+                depth -= 1
+            else:
+                last_valid = i
+                break
+    # Also trim trailing unmatched ')' from the end
+    while s and s[-1] == ')':
+        depth = 0
+        for ch in s:
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+        if depth < 0:
+            s = s[:-1]
+        else:
+            break
+    return s
+
+
 def parse_fol(s: str) -> Formula:
     """Parse a FOLIO FOL string into an AST."""
+    s = _fix_unbalanced_parens(s)
     tokens = tokenize(s)
     return Parser(tokens).parse()
