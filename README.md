@@ -44,6 +44,29 @@ LLM formalizes premises and produces step-by-step reasoning with FOL, each step 
 uv run python -m cotlog.eval --mode cot --limit 10 -v
 ```
 
+### Standalone CoT verification
+
+Verify any natural language argument, independent of the FOLIO dataset:
+
+```bash
+# From CLI flags
+uv run python -m cotlog.cot \
+  --premise "All humans are mortal." \
+  --premise "Socrates is human." \
+  --conclusion "Socrates is mortal."
+
+# From a JSON file
+uv run python -m cotlog.cot input.json
+
+# Machine-readable output
+uv run python -m cotlog.cot --json \
+  --premise "All humans are mortal." \
+  --premise "Socrates is human." \
+  --conclusion "Socrates is mortal."
+```
+
+The JSON file format is `{"premises": ["..."], "conclusion": "..."}`. Use `--max-retries N` to control feedback loop iterations, `--model` to pick a model, and `-v` for verbose step reasoning.
+
 ### Options
 
 ```
