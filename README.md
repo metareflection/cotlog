@@ -36,9 +36,9 @@ Have an LLM translate natural language to FOL, then verify via E-prover:
 uv run python -m cotlog.eval --mode llm --limit 10 -v
 ```
 
-### Chain-of-thought verification
+### Chain-of-thought verification (eval)
 
-LLM formalizes premises and produces step-by-step reasoning with FOL, each step verified against the LLM's own consistent vocabulary. Failed steps are fed back to the LLM for revision:
+Run CoT verification over FOLIO examples and report verification statistics (not accuracy — CoT checks internal reasoning consistency, not agreement with gold labels):
 
 ```bash
 uv run python -m cotlog.eval --mode cot --limit 10 -v
@@ -87,10 +87,14 @@ results/{mode}_{YYYYMMDD_HHMMSS}.jsonl   — one JSON object per example
 results/{mode}_{YYYYMMDD_HHMMSS}.txt     — human-readable summary report
 ```
 
-The JSONL file contains per-example records with gold/predicted labels, timing, error info, and mode-specific fields (e.g. `llm_response`, `szs_status` for LLM mode; `steps`, `verified_label`, `premise_fols`, `llm_conclusion_fol`, `rounds` for CoT mode). Inspect with `jq`:
+The JSONL file contains per-example records with timing, error info, and mode-specific fields. Inspect with `jq`:
 
 ```bash
+# Gold/LLM: find mismatches
 cat results/llm_*.jsonl | jq 'select(.correct == false)'
+
+# CoT: find examples with unverified steps
+cat results/cot_*.jsonl | jq 'select(.all_steps_verified == false) | {index, conclusion, steps: [.steps[] | select(.verified == false) | {step_num, error, fol_str}]}'
 ```
 
 ## How it works
@@ -119,5 +123,11 @@ uv run python -m pytest tests/
 ## Results
 
 Gold FOL on FOLIO validation (204 examples): **91.2% accuracy** (186/204 correct, 8 parse errors from malformed data).
+
+## Known limitations
+
+- **No equality support**: The FOL parser doesn't handle `=` or `≠`. LLM-generated steps using equality will fail to parse.
+- **Uncertain conclusions can't be "proved"**: When the correct answer is Uncertain, the prover returns Uncertain by design (neither the conjecture nor its negation is provable). These aren't verification failures — they're correct, but they don't count as "fully verified" in the current reporting.
+- **LLM may assume unstated facts**: Steps like `Employee(james)` that assert facts not in the premises are legitimately unverifiable by the prover.
 
 See [DESIGN.md](DESIGN.md) for full architectural details.

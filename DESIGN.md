@@ -11,28 +11,32 @@ NL premises + conclusion
         │                                              │
         ├─── llm mode ───── LLM generates FOL ────────┤
         │                                              │
-        └─── cot mode ───── LLM generates stepwise ───┤
-                            reasoning + per-step FOL   │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │   FOL Parser    │
-                                              │  (Unicode AST)  │
-                                              └────────┬────────┘
-                                                       │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │  TPTP Renderer  │
-                                              │  (AST → FOF)    │
-                                              └────────┬────────┘
-                                                       │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │    E-prover     │
-                                              │  (SZS status)   │
-                                              └────────┬────────┘
-                                                       │
-                                                       ▼
-                                              True / False / Uncertain
+        │                                              ▼
+        │                                     ┌─────────────────┐
+        │                                     │   FOL Parser    │
+        │                                     │  (Unicode AST)  │
+        │                                     └────────┬────────┘
+        │                                              ▼
+        │                                     ┌─────────────────┐
+        │                                     │  TPTP Renderer  │
+        │                                     └────────┬────────┘
+        │                                              ▼
+        │                                     ┌─────────────────┐
+        │                                     │    E-prover     │
+        │                                     └────────┬────────┘
+        │                                              ▼
+        │                                     True / False / Uncertain
+        │
+        └─── cot mode ───── LLM formalizes premises + conclusion,
+                            reasons step-by-step with FOL
+                                       │
+                              verify each step via prover
+                                       │
+                              feedback loop on failures
+                                       │
+                              verify conclusion via prover
+                                       ▼
+                            verification report (not accuracy)
 ```
 
 ## Modules
@@ -81,7 +85,9 @@ The entire pipeline uses the LLM's own vocabulary — no gold FOL is needed. Thi
 | `--mode llm` | LLM generates FOL, prover verifies | Yes |
 | `--mode cot` | LLM generates CoT + FOL, each step verified | Yes |
 
-Reports accuracy, confusion matrix, and (for CoT) step-level verification rate and LLM self-reported answer accuracy. Each run writes per-example JSONL and a summary TXT file to `results/` (configurable via `--output-dir`).
+Gold and LLM modes report accuracy and confusion matrix. CoT mode reports verification statistics (fully verified rate, step verification rate, avg feedback rounds) — it measures reasoning soundness, not agreement with gold labels. Each run writes per-example JSONL and a summary TXT file to `results/` (configurable via `--output-dir`).
+
+**`cot.py`** — Standalone CoT verification CLI. Takes arbitrary NL premises + conclusion (via flags or JSON file), runs the full CoT pipeline, prints human-readable or JSON output. Independent of any dataset.
 
 ## Data flow by mode
 
@@ -159,8 +165,14 @@ uv run python -m cotlog.eval --mode gold
 # LLM FOL generation (requires AWS credentials)
 uv run python -m cotlog.eval --mode llm --limit 10 -v
 
-# CoT verification
+# CoT verification statistics over FOLIO
 uv run python -m cotlog.eval --mode cot --limit 10 -v
+
+# Standalone CoT on arbitrary input
+uv run python -m cotlog.cot \
+  --premise "All humans are mortal." \
+  --premise "Socrates is human." \
+  --conclusion "Socrates is mortal."
 
 # Override model
 uv run python -m cotlog.eval --mode llm --model haiku
