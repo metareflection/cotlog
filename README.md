@@ -64,7 +64,7 @@ results/{mode}_{YYYYMMDD_HHMMSS}.jsonl   — one JSON object per example
 results/{mode}_{YYYYMMDD_HHMMSS}.txt     — human-readable summary report
 ```
 
-The JSONL file contains per-example records with gold/predicted labels, timing, error info, and mode-specific fields (e.g. `llm_response`, `szs_status` for LLM mode; `steps`, `verified_label`, `premise_fols`, `rounds` for CoT mode). Inspect with `jq`:
+The JSONL file contains per-example records with gold/predicted labels, timing, error info, and mode-specific fields (e.g. `llm_response`, `szs_status` for LLM mode; `steps`, `verified_label`, `premise_fols`, `llm_conclusion_fol`, `rounds` for CoT mode). Inspect with `jq`:
 
 ```bash
 cat results/llm_*.jsonl | jq 'select(.correct == false)'
@@ -85,7 +85,7 @@ cat results/llm_*.jsonl | jq 'select(.correct == false)'
 
 **FOL Generation** (`src/cotlog/fol_gen.py`) — prompts the LLM with few-shot examples to translate NL premises/conclusion into FOL, then feeds the result through the standard prover pipeline.
 
-**CoT Verification** (`src/cotlog/cot_verify.py`) — multi-turn pipeline: the LLM first formalizes all premises into FOL using its own consistent vocabulary, then reasons step-by-step with a FOL formula per step. Each step is verified against the LLM's formalized premises plus previously verified steps. When steps fail, prover errors are fed back to the LLM for revision (up to 2 retries by default).
+**CoT Verification** (`src/cotlog/cot_verify.py`) — multi-turn pipeline: the LLM formalizes all premises and the conclusion into FOL using its own consistent vocabulary, then reasons step-by-step with a FOL formula per step. Each step is verified against the LLM's formalized premises plus previously verified steps, and the conclusion is verified against the full accumulated knowledge. When steps fail, prover errors are fed back to the LLM for revision (up to 2 retries by default). No gold FOL is needed.
 
 ## Tests
 

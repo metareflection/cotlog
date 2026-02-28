@@ -64,11 +64,12 @@ Auth uses the standard AWS credential chain (env vars, `~/.aws/`, instance profi
 **`fol_gen.py`** — **Task A: LLM FOL generation.** Prompts the LLM to translate NL premises + conclusion into FOL using the same Unicode notation as FOLIO gold data. Includes 2 few-shot examples from the training set. Output format: `P:` prefixed premise lines, `C:` prefixed conclusion. Parsed via regex, then fed into the standard prover pipeline. Returns `FolGenResult` with parsed FOL and raw LLM response.
 
 **`cot_verify.py`** — **Task B: Chain-of-thought verification with feedback loop.** Multi-turn pipeline:
-1. Prompt the LLM to formalize all premises into FOL (`PREMISE N:`), then reason step-by-step (`STEP N:` / `FOL:`), using its own consistent predicate vocabulary.
+1. Prompt the LLM to formalize all premises (`PREMISE N:`) and the conclusion (`CONCLUSION:`) into FOL, then reason step-by-step (`STEP N:` / `FOL:`), using its own consistent predicate vocabulary.
 2. Verify each step incrementally against the LLM's own formalized premises + previously verified steps.
 3. If steps fail verification, send prover errors back to the LLM and ask it to revise (up to `max_retries` rounds, default 2).
+4. Verify the LLM's formalized conclusion against accumulated verified knowledge.
 
-This design avoids the naming mismatch problem — since the LLM formalizes both premises and steps, the prover can verify internal consistency. The final conclusion is checked against the accumulated verified knowledge base using gold FOL.
+The entire pipeline uses the LLM's own vocabulary — no gold FOL is needed. This avoids the naming mismatch problem and lets the prover verify full internal consistency end-to-end.
 
 ### Evaluation
 
@@ -126,16 +127,16 @@ FolioExample.conclusion (NL) ─────────────────
                               no                                          parse corrections
                               │                                           re-verify failed steps
                               ▼                                           (up to max_retries)
-                      prove_example(verified_ast, gold_conclusion_fol) ──▶ verified_label
+                      prove_example(verified_ast, llm_conclusion_fol) ──▶ verified_label
 ```
 
-The LLM formalizes both premises and reasoning steps in its own consistent vocabulary. The prover verifies internal consistency — each step must follow from the LLM's premises + prior verified steps. When steps fail, prover errors are fed back to the LLM for revision. The final conclusion is checked against accumulated knowledge using gold FOL.
+The entire pipeline uses the LLM's own consistent vocabulary — premises, steps, and conclusion are all formalized by the LLM. The prover verifies internal consistency: each step must follow from the LLM's premises + prior verified steps, and the conclusion must follow from the accumulated knowledge. When steps fail, prover errors are fed back to the LLM for revision.
 
 ## Prompt design
 
 Both prompts specify the exact Unicode notation, naming conventions (single lowercase letter = variable, CamelCase = predicate, lowercase multi-char = constant), and structured output format. Temperature is set to 0 for reproducibility.
 
-The FOL generation prompt uses 2 few-shot examples drawn from FOLIO training data — one with quantifiers and XOR, one with constants and existential quantification. The CoT prompt uses a `PREMISE N:` / `STEP N:` / `FOL:` / `ANSWER:` format parsed by regex, and emphasizes that each FOL line must contain exactly one formula with no prose.
+The FOL generation prompt uses 2 few-shot examples drawn from FOLIO training data — one with quantifiers and XOR, one with constants and existential quantification. The CoT prompt uses a `PREMISE N:` / `CONCLUSION:` / `STEP N:` / `FOL:` / `ANSWER:` format parsed by regex, and emphasizes that each FOL line must contain exactly one formula with no prose.
 
 ## Testing strategy
 
