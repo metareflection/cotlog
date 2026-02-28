@@ -194,6 +194,7 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
 
 def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: bool = False, model: str | None = None) -> dict:
     """Run all examples using CoT verification."""
+    from .cot import result_to_record
     from .cot_verify import verify_cot
 
     correct = 0
@@ -210,34 +211,12 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
         total += 1
         t0 = time.monotonic()
         error_msg: str | None = None
-        llm_response: str | None = None
-        llm_answer: str | None = None
-        steps_data: list[dict] | None = None
-        verified_label: str | None = None
-        premise_fols: list[str] | None = None
-        llm_conclusion_fol: str | None = None
-        rounds: int = 0
+        result = None
         try:
             result = verify_cot(
                 ex.premises, ex.conclusion,
                 model=model, cpu_limit=cpu_limit,
             )
-            llm_response = result.raw_response
-            llm_answer = result.llm_answer
-            verified_label = result.verified_label
-            premise_fols = result.premise_fols
-            llm_conclusion_fol = result.conclusion_fol
-            rounds = result.rounds
-            steps_data = [
-                {
-                    'step_num': s.step_num,
-                    'reasoning': s.reasoning,
-                    'fol_str': s.fol_str,
-                    'verified': s.verified,
-                    'error': s.error,
-                }
-                for s in result.steps
-            ]
 
             # Count step-level stats
             for step in result.steps:
@@ -281,25 +260,19 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
                 'conclusion': ex.conclusion,
             })
 
-        records.append({
+        record = {
             'index': i,
             'gold_label': ex.label,
             'predicted_label': predicted,
             'correct': is_correct,
             'conclusion': ex.conclusion,
-            'conclusion_fol': ex.conclusion_fol,
             'premises': ex.premises,
-            'premises_fol': ex.premises_fol,
             'error': error_msg,
             'elapsed_s': round(elapsed, 3),
-            'llm_response': llm_response,
-            'llm_answer': llm_answer,
-            'steps': steps_data,
-            'verified_label': verified_label,
-            'premise_fols': premise_fols,
-            'llm_conclusion_fol': llm_conclusion_fol,
-            'rounds': rounds,
-        })
+        }
+        if result is not None:
+            record.update(result_to_record(result))
+        records.append(record)
 
     accuracy = correct / total if total > 0 else 0.0
     step_verification_rate = verified_steps / total_steps if total_steps > 0 else 0.0

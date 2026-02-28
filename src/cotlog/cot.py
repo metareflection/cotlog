@@ -10,10 +10,32 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import asdict
 from pathlib import Path
 
-from .cot_verify import verify_cot
+from .cot_verify import CotResult, verify_cot
+
+
+def result_to_record(result: CotResult) -> dict:
+    """Convert a CotResult to a JSON-serializable dict."""
+    return {
+        'llm_answer': result.llm_answer,
+        'verified_label': result.verified_label,
+        'all_steps_verified': result.all_steps_verified,
+        'premise_fols': result.premise_fols,
+        'conclusion_fol': result.conclusion_fol,
+        'rounds': result.rounds,
+        'raw_response': result.raw_response,
+        'steps': [
+            {
+                'step_num': s.step_num,
+                'reasoning': s.reasoning,
+                'fol_str': s.fol_str,
+                'verified': s.verified,
+                'error': s.error,
+            }
+            for s in result.steps
+        ],
+    }
 
 
 def print_result(result, premises: list[str], conclusion: str, verbose: bool = False) -> None:
@@ -87,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     if args.json_output:
-        out = asdict(result)
+        out = result_to_record(result)
         json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
         print()
     else:
