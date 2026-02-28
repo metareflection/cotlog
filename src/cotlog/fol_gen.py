@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from .llm import generate
 
@@ -90,12 +91,20 @@ def parse_fol_response(response: str) -> tuple[list[str], str]:
     return [p.strip() for p in premises], conclusions[-1].strip()
 
 
+@dataclass
+class FolGenResult:
+    """Result of FOL generation from natural language."""
+    premises_fol: list[str]
+    conclusion_fol: str
+    raw_response: str
+
+
 def generate_fol(
     premises: list[str],
     conclusion: str,
     *,
     model: str | None = None,
-) -> tuple[list[str], str]:
+) -> FolGenResult:
     """Generate FOL from natural language using an LLM.
 
     Args:
@@ -104,8 +113,13 @@ def generate_fol(
         model: Optional model override.
 
     Returns:
-        (premises_fol, conclusion_fol) as raw FOL strings.
+        FolGenResult with premises_fol, conclusion_fol, and raw_response.
     """
     prompt = build_prompt(premises, conclusion)
     response = generate(prompt, system=_SYSTEM, model=model)
-    return parse_fol_response(response)
+    premises_fol, conclusion_fol = parse_fol_response(response)
+    return FolGenResult(
+        premises_fol=premises_fol,
+        conclusion_fol=conclusion_fol,
+        raw_response=response,
+    )

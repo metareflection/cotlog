@@ -12,3 +12,6 @@ wheels/
 
 # Data
 data/
+
+# Evaluation results
+results/

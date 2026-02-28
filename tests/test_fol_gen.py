@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from cotlog.fol_gen import build_prompt, parse_fol_response, generate_fol
+from cotlog.fol_gen import build_prompt, parse_fol_response, generate_fol, FolGenResult
 
 
 class TestBuildPrompt:
@@ -86,12 +86,14 @@ P: ∀x (Human(x) → Mortal(x))
 P: Human(socrates)
 C: Mortal(socrates)"""
 
-        premises, conclusion = generate_fol(
+        result = generate_fol(
             ["All humans are mortal.", "Socrates is a human."],
             "Socrates is mortal.",
         )
-        assert len(premises) == 2
-        assert conclusion == "Mortal(socrates)"
+        assert isinstance(result, FolGenResult)
+        assert len(result.premises_fol) == 2
+        assert result.conclusion_fol == "Mortal(socrates)"
+        assert result.raw_response == mock_generate.return_value
 
         # Verify prompt was constructed correctly
         call_args = mock_generate.call_args
@@ -101,5 +103,6 @@ C: Mortal(socrates)"""
     @patch('cotlog.fol_gen.generate')
     def test_model_passthrough(self, mock_generate):
         mock_generate.return_value = "P: A(x)\nC: B(x)"
-        generate_fol(["p"], "c", model="haiku")
+        result = generate_fol(["p"], "c", model="haiku")
+        assert isinstance(result, FolGenResult)
         assert mock_generate.call_args[1].get('model') == 'haiku'

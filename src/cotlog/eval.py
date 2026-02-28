@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import io
+import json
 import sys
+import time
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 from .folio import FolioExample, load_folio
@@ -18,9 +22,12 @@ def evaluate_gold(examples: list[FolioExample], cpu_limit: int = 30, verbose: bo
     errors = 0
     confusion: Counter[tuple[str, str]] = Counter()  # (gold, predicted)
     mismatches: list[dict] = []
+    records: list[dict] = []
 
     for i, ex in enumerate(examples):
         total += 1
+        t0 = time.monotonic()
+        error_msg: str | None = None
         try:
             premises_ast = [parse_fol(p) for p in ex.premises_fol]
             conjecture_ast = parse_fol(ex.conclusion_fol)
@@ -35,11 +42,14 @@ def evaluate_gold(examples: list[FolioExample], cpu_limit: int = 30, verbose: bo
         except Exception as e:
             errors += 1
             predicted = 'Error'
+            error_msg = str(e)
             if verbose:
                 print(f"  [{i}] ERROR: {e}", file=sys.stderr)
 
+        elapsed = time.monotonic() - t0
         confusion[(ex.label, predicted)] += 1
-        if predicted == ex.label:
+        is_correct = predicted == ex.label
+        if is_correct:
             correct += 1
         else:
             mismatches.append({
@@ -50,8 +60,21 @@ def evaluate_gold(examples: list[FolioExample], cpu_limit: int = 30, verbose: bo
                 'conclusion_fol': ex.conclusion_fol,
             })
 
+        records.append({
+            'index': i,
+            'gold_label': ex.label,
+            'predicted_label': predicted,
+            'correct': is_correct,
+            'conclusion': ex.conclusion,
+            'conclusion_fol': ex.conclusion_fol,
+            'premises': ex.premises,
+            'premises_fol': ex.premises_fol,
+            'error': error_msg,
+            'elapsed_s': round(elapsed, 3),
+        })
+
         if verbose:
-            status = 'OK' if predicted == ex.label else 'MISS'
+            status = 'OK' if is_correct else 'MISS'
             print(f"  [{i:3d}] {status}  gold={ex.label:<10s} pred={predicted:<10s}  {ex.conclusion_fol}")
 
     accuracy = correct / total if total > 0 else 0.0
@@ -62,6 +85,7 @@ def evaluate_gold(examples: list[FolioExample], cpu_limit: int = 30, verbose: bo
         'accuracy': accuracy,
         'confusion': dict(confusion),
         'mismatches': mismatches,
+        'records': records,
     }
 
 
@@ -75,19 +99,29 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
     parse_failures = 0
     confusion: Counter[tuple[str, str]] = Counter()
     mismatches: list[dict] = []
+    records: list[dict] = []
 
     for i, ex in enumerate(examples):
         total += 1
+        t0 = time.monotonic()
+        error_msg: str | None = None
+        llm_response: str | None = None
+        llm_premises_fol: list[str] | None = None
+        llm_conclusion_fol: str | None = None
+        szs_status: str | None = None
         try:
-            premises_fol, conclusion_fol = generate_fol(
+            gen_result = generate_fol(
                 ex.premises, ex.conclusion, model=model,
             )
+            llm_response = gen_result.raw_response
+            llm_premises_fol = gen_result.premises_fol
+            llm_conclusion_fol = gen_result.conclusion_fol
             if verbose:
-                print(f"  [{i:3d}] LLM FOL premises: {premises_fol}", file=sys.stderr)
-                print(f"  [{i:3d}] LLM FOL conclusion: {conclusion_fol}", file=sys.stderr)
+                print(f"  [{i:3d}] LLM FOL premises: {gen_result.premises_fol}", file=sys.stderr)
+                print(f"  [{i:3d}] LLM FOL conclusion: {gen_result.conclusion_fol}", file=sys.stderr)
 
-            premises_ast = [parse_fol(p) for p in premises_fol]
-            conjecture_ast = parse_fol(conclusion_fol)
+            premises_ast = [parse_fol(p) for p in gen_result.premises_fol]
+            conjecture_ast = parse_fol(gen_result.conclusion_fol)
             result = prove_example(
                 premises_tptp=[],
                 conjecture_tptp='',
@@ -96,20 +130,25 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
                 cpu_limit=cpu_limit,
             )
             predicted = result.label
+            szs_status = result.szs_status
         except ValueError as e:
             parse_failures += 1
             errors += 1
             predicted = 'Error'
+            error_msg = str(e)
             if verbose:
                 print(f"  [{i}] PARSE ERROR: {e}", file=sys.stderr)
         except Exception as e:
             errors += 1
             predicted = 'Error'
+            error_msg = str(e)
             if verbose:
                 print(f"  [{i}] ERROR: {e}", file=sys.stderr)
 
+        elapsed = time.monotonic() - t0
         confusion[(ex.label, predicted)] += 1
-        if predicted == ex.label:
+        is_correct = predicted == ex.label
+        if is_correct:
             correct += 1
         else:
             mismatches.append({
@@ -119,8 +158,25 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
                 'conclusion': ex.conclusion,
             })
 
+        records.append({
+            'index': i,
+            'gold_label': ex.label,
+            'predicted_label': predicted,
+            'correct': is_correct,
+            'conclusion': ex.conclusion,
+            'conclusion_fol': ex.conclusion_fol,
+            'premises': ex.premises,
+            'premises_fol': ex.premises_fol,
+            'error': error_msg,
+            'elapsed_s': round(elapsed, 3),
+            'llm_response': llm_response,
+            'llm_premises_fol': llm_premises_fol,
+            'llm_conclusion_fol': llm_conclusion_fol,
+            'szs_status': szs_status,
+        })
+
         if verbose:
-            status = 'OK' if predicted == ex.label else 'MISS'
+            status = 'OK' if is_correct else 'MISS'
             print(f"  [{i:3d}] {status}  gold={ex.label:<10s} pred={predicted:<10s}  {ex.conclusion}")
 
     accuracy = correct / total if total > 0 else 0.0
@@ -132,6 +188,7 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
         'accuracy': accuracy,
         'confusion': dict(confusion),
         'mismatches': mismatches,
+        'records': records,
     }
 
 
@@ -147,15 +204,40 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
     llm_answer_correct = 0
     confusion: Counter[tuple[str, str]] = Counter()
     mismatches: list[dict] = []
+    records: list[dict] = []
 
     for i, ex in enumerate(examples):
         total += 1
+        t0 = time.monotonic()
+        error_msg: str | None = None
+        llm_response: str | None = None
+        llm_answer: str | None = None
+        steps_data: list[dict] | None = None
+        verified_label: str | None = None
+        premise_fols: list[str] | None = None
+        llm_conclusion_fol: str | None = None
+        rounds: int = 0
         try:
             result = verify_cot(
                 ex.premises, ex.conclusion,
-                ex.premises_fol, ex.conclusion_fol,
                 model=model, cpu_limit=cpu_limit,
             )
+            llm_response = result.raw_response
+            llm_answer = result.llm_answer
+            verified_label = result.verified_label
+            premise_fols = result.premise_fols
+            llm_conclusion_fol = result.conclusion_fol
+            rounds = result.rounds
+            steps_data = [
+                {
+                    'step_num': s.step_num,
+                    'reasoning': s.reasoning,
+                    'fol_str': s.fol_str,
+                    'verified': s.verified,
+                    'error': s.error,
+                }
+                for s in result.steps
+            ]
 
             # Count step-level stats
             for step in result.steps:
@@ -182,11 +264,14 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
         except Exception as e:
             errors += 1
             predicted = 'Error'
+            error_msg = str(e)
             if verbose:
                 print(f"  [{i}] ERROR: {e}", file=sys.stderr)
 
+        elapsed = time.monotonic() - t0
         confusion[(ex.label, predicted)] += 1
-        if predicted == ex.label:
+        is_correct = predicted == ex.label
+        if is_correct:
             correct += 1
         else:
             mismatches.append({
@@ -195,6 +280,26 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
                 'predicted': predicted,
                 'conclusion': ex.conclusion,
             })
+
+        records.append({
+            'index': i,
+            'gold_label': ex.label,
+            'predicted_label': predicted,
+            'correct': is_correct,
+            'conclusion': ex.conclusion,
+            'conclusion_fol': ex.conclusion_fol,
+            'premises': ex.premises,
+            'premises_fol': ex.premises_fol,
+            'error': error_msg,
+            'elapsed_s': round(elapsed, 3),
+            'llm_response': llm_response,
+            'llm_answer': llm_answer,
+            'steps': steps_data,
+            'verified_label': verified_label,
+            'premise_fols': premise_fols,
+            'llm_conclusion_fol': llm_conclusion_fol,
+            'rounds': rounds,
+        })
 
     accuracy = correct / total if total > 0 else 0.0
     step_verification_rate = verified_steps / total_steps if total_steps > 0 else 0.0
@@ -212,6 +317,7 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
         'llm_answer_accuracy': llm_answer_accuracy,
         'confusion': dict(confusion),
         'mismatches': mismatches,
+        'records': records,
     }
 
 
@@ -261,6 +367,40 @@ def print_report(results: dict, mode: str = 'gold') -> None:
             print(f"  ... and {len(results['mismatches']) - 20} more")
 
 
+def write_results(results: dict, mode: str, output_dir: Path) -> None:
+    """Write JSONL and TXT result files for a completed evaluation run."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    basename = f"{mode}_{timestamp}"
+
+    jsonl_path = output_dir / f"{basename}.jsonl"
+    txt_path = output_dir / f"{basename}.txt"
+
+    # Write JSONL
+    with open(jsonl_path, 'w') as f:
+        for record in results['records']:
+            f.write(json.dumps(record, ensure_ascii=False) + '\n')
+
+    # Capture print_report output to string and also print to stdout
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
+    print_report(results, mode=mode)
+    sys.stdout = old_stdout
+    report_text = buf.getvalue()
+
+    # Print to stdout
+    sys.stdout.write(report_text)
+
+    # Write TXT
+    with open(txt_path, 'w') as f:
+        f.write(report_text)
+
+    print(f"Results written to:")
+    print(f"  {jsonl_path}")
+    print(f"  {txt_path}")
+
+
 # Keep backward compat
 evaluate = evaluate_gold
 
@@ -275,6 +415,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument('--data', type=Path, default=None, help='Path to FOLIO JSONL')
     parser.add_argument('--limit', type=int, default=None, help='Max examples to evaluate')
     parser.add_argument('--cpu-limit', type=int, default=30, help='E-prover CPU limit per problem')
+    parser.add_argument('--output-dir', type=Path, default=Path('results'),
+                        help='Directory for result files (default: results/)')
     parser.add_argument('--verbose', '-v', action='store_true')
     args = parser.parse_args(argv)
 
@@ -296,7 +438,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 
-    print_report(results, mode=args.mode)
+    write_results(results, mode=args.mode, output_dir=args.output_dir)
 
 
 if __name__ == '__main__':

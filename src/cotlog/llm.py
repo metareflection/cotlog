@@ -48,3 +48,25 @@ def generate(
         kwargs["system"] = system
     response = client.messages.create(**kwargs)
     return response.content[0].text
+
+
+def chat(
+    messages: list[dict],
+    *,
+    system: str = "",
+    model: str | None = None,
+    max_tokens: int = 4096,
+    temperature: float = 0.0,
+) -> str:
+    """Send a multi-turn conversation to Claude via Bedrock and return the text response."""
+    client = _get_client()
+    kwargs: dict = {
+        "model": _resolve_model(model),
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": messages,
+    }
+    if system:
+        kwargs["system"] = system
+    response = client.messages.create(**kwargs)
+    return response.content[0].text

@@ -6,22 +6,33 @@ import re
 from dataclasses import dataclass, field
 
 from .fol_parser import parse_fol
-from .llm import generate
+from .llm import chat
 from .prover import prove_example
-from .tptp import problem_to_tptp
 
-_SYSTEM = "You are an expert in formal logic. Reason step by step, providing first-order logic for each step."
+_SYSTEM = "You are an expert in first-order logic. Reason step by step, providing first-order logic for each step."
 
 _PROMPT_TEMPLATE = """\
 Given the premises below, determine whether the conclusion is True, False, or Uncertain.
-Show your reasoning step by step.
 
-For EACH step, write exactly this format:
+First, formalize each premise into first-order logic.
+Then, show your reasoning step by step.
+
+For EACH premise, write exactly:
+PREMISE N: [first-order logic formula]
+
+Then formalize the conclusion:
+CONCLUSION: [first-order logic formula]
+
+For EACH reasoning step, write exactly:
 STEP N: [natural language reasoning]
-FOL: [first-order logic formula for this step]
+FOL: [a single first-order logic formula for this step]
 
 After all steps, write your final answer as:
 ANSWER: True/False/Uncertain
+
+IMPORTANT:
+- Each FOL line must contain exactly ONE formula, no prose or commentary.
+- Use consistent predicate and constant names across all premises and steps.
 
 Use this notation for FOL:
   ∀ (forall), ∃ (exists), → (implies), ∧ (and), ∨ (or),
@@ -36,6 +47,20 @@ Premises:
 {premises_text}
 
 Conclusion: {conclusion}"""
+
+_FEEDBACK_TEMPLATE = """\
+Some of your reasoning steps could not be verified by the theorem prover. \
+Please provide corrected FOL for the failed steps below.
+
+For each corrected step, use exactly:
+STEP N: [natural language reasoning]
+FOL: [a single corrected first-order logic formula]
+
+Failed steps:
+{failures}
+
+Remember: each FOL line must be a single formula with no extra text. \
+Use the same predicate and constant names as your premises."""
 
 
 @dataclass
@@ -53,6 +78,10 @@ class CotResult:
     llm_answer: str | None = None  # The LLM's stated answer
     verified_label: str | None = None  # Label from step-level verification
     all_steps_verified: bool = False
+    raw_response: str = ""
+    premise_fols: list[str] = field(default_factory=list)
+    conclusion_fol: str = ""
+    rounds: int = 1
 
 
 def build_prompt(premises: list[str], conclusion: str) -> str:
@@ -61,6 +90,8 @@ def build_prompt(premises: list[str], conclusion: str) -> str:
     return _PROMPT_TEMPLATE.format(premises_text=premises_text, conclusion=conclusion)
 
 
+_PREMISE_RE = re.compile(r'^PREMISE\s+\d+:\s*(.+)$', re.MULTILINE)
+_CONCLUSION_RE = re.compile(r'^CONCLUSION:\s*(.+)$', re.MULTILINE)
 _STEP_RE = re.compile(
     r'STEP\s+(\d+):\s*(.+?)\nFOL:\s*(.+?)(?=\nSTEP|\nANSWER|\Z)',
     re.DOTALL,
@@ -68,12 +99,17 @@ _STEP_RE = re.compile(
 _ANSWER_RE = re.compile(r'ANSWER:\s*(True|False|Uncertain)', re.IGNORECASE)
 
 
-def parse_cot_response(response: str) -> tuple[list[CotStep], str | None]:
-    """Parse the LLM's CoT response into steps and a final answer.
+def parse_cot_response(response: str) -> tuple[list[str], str | None, list[CotStep], str | None]:
+    """Parse the LLM's CoT response into premise FOLs, conclusion FOL, steps, and answer.
 
     Returns:
-        (steps, answer) where answer may be None if not found.
+        (premise_fols, conclusion_fol, steps, answer)
     """
+    premise_fols = [m.strip() for m in _PREMISE_RE.findall(response)]
+
+    conclusion_m = _CONCLUSION_RE.search(response)
+    conclusion_fol = conclusion_m.group(1).strip() if conclusion_m else None
+
     steps = []
     for m in _STEP_RE.finditer(response):
         step_num = int(m.group(1))
@@ -84,35 +120,45 @@ def parse_cot_response(response: str) -> tuple[list[CotStep], str | None]:
     answer_m = _ANSWER_RE.search(response)
     answer = answer_m.group(1) if answer_m else None
     if answer:
-        answer = answer.capitalize()  # Normalize to "True"/"False"/"Uncertain"
+        answer = answer.capitalize()
 
-    return steps, answer
+    return premise_fols, conclusion_fol, steps, answer
+
+
+def build_feedback(failed_steps: list[CotStep]) -> str:
+    """Build a feedback message listing failed steps and their errors."""
+    lines = []
+    for step in failed_steps:
+        lines.append(f"- STEP {step.step_num}: {step.error}")
+        lines.append(f"  Your FOL was: {step.fol_str}")
+    return _FEEDBACK_TEMPLATE.format(failures="\n".join(lines))
 
 
 def verify_steps(
     steps: list[CotStep],
-    premises_fol: list[str],
-    conclusion_fol: str,
+    premise_fols: list[str],
+    conclusion_fol: str | None,
     cpu_limit: int = 30,
 ) -> CotResult:
     """Verify each CoT step using the E-prover.
 
+    Uses the LLM's own formalized premises as the axiom base.
     For step N, check that its FOL follows from:
-    - The original premises (as FOL)
+    - The LLM's formalized premises
     - All previously verified steps' FOL
 
-    Finally, check the conclusion against all verified steps + premises.
+    Finally, check the LLM's conclusion FOL against all verified steps + premises.
     """
-    # Parse premise FOL strings to AST
+    # Parse LLM's premise FOL strings to AST
     premises_ast = []
-    for p in premises_fol:
+    for p in premise_fols:
         try:
             premises_ast.append(parse_fol(p))
         except Exception:
             pass  # Skip unparseable premises
 
     verified_ast = list(premises_ast)  # Accumulate verified formulas
-    result = CotResult(steps=steps)
+    result = CotResult(steps=steps, premise_fols=premise_fols)
 
     for step in steps:
         try:
@@ -142,18 +188,21 @@ def verify_steps(
 
     result.all_steps_verified = all(s.verified for s in steps)
 
-    # Try to verify the final conclusion from accumulated knowledge
-    try:
-        conj_ast = parse_fol(conclusion_fol)
-        final_result = prove_example(
-            premises_tptp=[],
-            conjecture_tptp='',
-            premises_ast=verified_ast,
-            conjecture_ast=conj_ast,
-            cpu_limit=cpu_limit,
-        )
-        result.verified_label = final_result.label
-    except Exception:
+    # Try to verify the LLM's conclusion from accumulated knowledge
+    if conclusion_fol:
+        try:
+            conj_ast = parse_fol(conclusion_fol)
+            final_result = prove_example(
+                premises_tptp=[],
+                conjecture_tptp='',
+                premises_ast=verified_ast,
+                conjecture_ast=conj_ast,
+                cpu_limit=cpu_limit,
+            )
+            result.verified_label = final_result.label
+        except Exception:
+            result.verified_label = 'Uncertain'
+    else:
         result.verified_label = 'Uncertain'
 
     return result
@@ -162,31 +211,70 @@ def verify_steps(
 def verify_cot(
     premises: list[str],
     conclusion: str,
-    premises_fol: list[str],
-    conclusion_fol: str,
     *,
     model: str | None = None,
     cpu_limit: int = 30,
+    max_retries: int = 2,
 ) -> CotResult:
-    """Full CoT verification pipeline.
+    """Full CoT verification pipeline with feedback loop.
 
-    1. Prompt LLM for step-by-step reasoning with FOL
+    1. Prompt LLM for premise + conclusion formalization and step-by-step reasoning
     2. Parse the response
-    3. Verify each step via E-prover
-    4. Return detailed results
+    3. Verify each step against LLM's own premises via E-prover
+    4. If steps fail, send feedback and let LLM revise (up to max_retries)
+    5. Verify LLM's conclusion against accumulated verified knowledge
+    6. Return detailed results
 
     Args:
         premises: NL premises (for the LLM prompt).
         conclusion: NL conclusion (for the LLM prompt).
-        premises_fol: Gold FOL premises (for prover verification).
-        conclusion_fol: Gold FOL conclusion (for prover verification).
         model: Optional model override.
         cpu_limit: E-prover CPU limit per step.
+        max_retries: Max feedback rounds (default 2).
     """
     prompt = build_prompt(premises, conclusion)
-    response = generate(prompt, system=_SYSTEM, model=model)
-    steps, answer = parse_cot_response(response)
+    messages: list[dict] = [{"role": "user", "content": prompt}]
+    response = chat(messages, system=_SYSTEM, model=model)
+    raw_responses = [response]
 
-    result = verify_steps(steps, premises_fol, conclusion_fol, cpu_limit=cpu_limit)
+    premise_fols, conclusion_fol, steps, answer = parse_cot_response(response)
+
+    result = verify_steps(steps, premise_fols, conclusion_fol, cpu_limit=cpu_limit)
     result.llm_answer = answer
+    rounds = 1
+
+    # Feedback loop
+    failed = [s for s in result.steps if s.verified is False]
+    retries = 0
+    while failed and retries < max_retries:
+        retries += 1
+        rounds += 1
+
+        feedback = build_feedback(failed)
+        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "user", "content": feedback})
+        response = chat(messages, system=_SYSTEM, model=model)
+        raw_responses.append(response)
+
+        # Parse only the corrected steps from the response
+        _, _, corrected_steps, _ = parse_cot_response(response)
+
+        # Build lookup of corrections by step number
+        corrections = {s.step_num: s for s in corrected_steps}
+
+        # Replace failed steps with corrections where available
+        for i, step in enumerate(result.steps):
+            if step.verified is False and step.step_num in corrections:
+                corrected = corrections[step.step_num]
+                result.steps[i] = corrected
+
+        # Re-verify all steps from scratch with the updated step list
+        result = verify_steps(result.steps, premise_fols, conclusion_fol, cpu_limit=cpu_limit)
+        result.llm_answer = answer
+        failed = [s for s in result.steps if s.verified is False]
+
+    result.raw_response = "\n---\n".join(raw_responses)
+    result.premise_fols = premise_fols
+    result.conclusion_fol = conclusion_fol or ""
+    result.rounds = rounds
     return result

@@ -52,7 +52,7 @@ NL premises + conclusion
 
 ### LLM layer (requires `anthropic[bedrock]`)
 
-**`llm.py`** — Thin Bedrock client. Single `generate()` function. Model resolved via short name (`sonnet` → `anthropic.claude-sonnet-4-6-20250514-v1:0`) or full ARN. Configured through environment variables:
+**`llm.py`** — Thin Bedrock client. `generate()` for single-shot prompts, `chat()` for multi-turn conversations. Model resolved via short name (`sonnet` → `anthropic.claude-sonnet-4-6-20250514-v1:0`) or full ARN. Configured through environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -61,13 +61,14 @@ NL premises + conclusion
 
 Auth uses the standard AWS credential chain (env vars, `~/.aws/`, instance profile, etc.) via `AnthropicBedrock`.
 
-**`fol_gen.py`** — **Task A: LLM FOL generation.** Prompts the LLM to translate NL premises + conclusion into FOL using the same Unicode notation as FOLIO gold data. Includes 2 few-shot examples from the training set. Output format: `P:` prefixed premise lines, `C:` prefixed conclusion. Parsed via regex, then fed into the standard prover pipeline.
+**`fol_gen.py`** — **Task A: LLM FOL generation.** Prompts the LLM to translate NL premises + conclusion into FOL using the same Unicode notation as FOLIO gold data. Includes 2 few-shot examples from the training set. Output format: `P:` prefixed premise lines, `C:` prefixed conclusion. Parsed via regex, then fed into the standard prover pipeline. Returns `FolGenResult` with parsed FOL and raw LLM response.
 
-**`cot_verify.py`** — **Task B: Chain-of-thought verification.** Prompts the LLM to reason step-by-step, producing a FOL formula for each reasoning step. Each step is verified incrementally:
-- Step 1: checked against gold FOL premises only
-- Step N: checked against premises + all previously verified steps
+**`cot_verify.py`** — **Task B: Chain-of-thought verification with feedback loop.** Multi-turn pipeline:
+1. Prompt the LLM to formalize all premises into FOL (`PREMISE N:`), then reason step-by-step (`STEP N:` / `FOL:`), using its own consistent predicate vocabulary.
+2. Verify each step incrementally against the LLM's own formalized premises + previously verified steps.
+3. If steps fail verification, send prover errors back to the LLM and ask it to revise (up to `max_retries` rounds, default 2).
 
-This catches exactly where a reasoning chain breaks down. The final conclusion is verified against the full accumulated knowledge base (premises + all verified intermediate steps).
+This design avoids the naming mismatch problem — since the LLM formalizes both premises and steps, the prover can verify internal consistency. The final conclusion is checked against the accumulated verified knowledge base using gold FOL.
 
 ### Evaluation
 
@@ -79,7 +80,7 @@ This catches exactly where a reasoning chain breaks down. The final conclusion i
 | `--mode llm` | LLM generates FOL, prover verifies | Yes |
 | `--mode cot` | LLM generates CoT + FOL, each step verified | Yes |
 
-Reports accuracy, confusion matrix, and (for CoT) step-level verification rate and LLM self-reported answer accuracy.
+Reports accuracy, confusion matrix, and (for CoT) step-level verification rate and LLM self-reported answer accuracy. Each run writes per-example JSONL and a summary TXT file to `results/` (configurable via `--output-dir`).
 
 ## Data flow by mode
 
@@ -107,30 +108,34 @@ Measures LLM FOL translation quality end-to-end. Failures can occur at two point
 ### CoT mode
 
 ```
-FolioExample.premises (NL) ──build_prompt──▶ LLM ──parse_cot_response──▶ steps[]{fol_str}
-FolioExample.conclusion (NL) ─────────────────┘                               │
+FolioExample.premises (NL) ──build_prompt──▶ LLM ──parse_cot_response──▶ premise_fols[]
+FolioExample.conclusion (NL) ─────────────────┘                          steps[]{fol_str}
                                                                                │
-FolioExample.premises_fol ──parse_fol──▶ premises_ast                          │
-                                              │                                │
-                      ┌───────────────────────┘                                │
-                      │                                                        │
-                      ▼            for each step:                              │
-              verified_ast ◀─────── parse_fol(step.fol_str)                    │
-              (accumulates)         prove_example(verified_ast, step_ast)      │
-                      │               ├── Theorem → verified, add to pool      │
-                      │               └── else → not verified                  │
-                      │                                                        │
-                      ▼                                                        │
-              prove_example(verified_ast, conclusion_fol) ──▶ verified_label
+                                    LLM's own premise FOLs ──parse_fol──▶ premises_ast
+                                                                               │
+                                              ┌────────────────────────────────┘
+                                              │
+                                              ▼            for each step:
+                                      verified_ast ◀─────── parse_fol(step.fol_str)
+                                      (accumulates)         prove_example(verified_ast, step_ast)
+                                              │               ├── Theorem → verified, add to pool
+                                              │               └── else → not verified
+                                              │
+                              ┌────── any failures? ──yes──▶ build_feedback ──▶ LLM (retry)
+                              │                                                     │
+                              no                                          parse corrections
+                              │                                           re-verify failed steps
+                              ▼                                           (up to max_retries)
+                      prove_example(verified_ast, gold_conclusion_fol) ──▶ verified_label
 ```
 
-CoT mode uses gold FOL premises as the verification ground truth, while the LLM generates intermediate reasoning steps. This separates "can the LLM reason correctly" from "can the LLM formalize correctly" — the premises are trusted, only the reasoning is tested.
+The LLM formalizes both premises and reasoning steps in its own consistent vocabulary. The prover verifies internal consistency — each step must follow from the LLM's premises + prior verified steps. When steps fail, prover errors are fed back to the LLM for revision. The final conclusion is checked against accumulated knowledge using gold FOL.
 
 ## Prompt design
 
 Both prompts specify the exact Unicode notation, naming conventions (single lowercase letter = variable, CamelCase = predicate, lowercase multi-char = constant), and structured output format. Temperature is set to 0 for reproducibility.
 
-The FOL generation prompt uses 2 few-shot examples drawn from FOLIO training data — one with quantifiers and XOR, one with constants and existential quantification. The CoT prompt uses a `STEP N:` / `FOL:` / `ANSWER:` format parsed by regex.
+The FOL generation prompt uses 2 few-shot examples drawn from FOLIO training data — one with quantifiers and XOR, one with constants and existential quantification. The CoT prompt uses a `PREMISE N:` / `STEP N:` / `FOL:` / `ANSWER:` format parsed by regex, and emphasizes that each FOL line must contain exactly one formula with no prose.
 
 ## Testing strategy
 
@@ -140,9 +145,9 @@ Tests are split by what they exercise:
 - **`test_tptp.py`** (11 tests) — AST-to-TPTP rendering, roundtrips, name sanitization
 - **`test_prover.py`** (5 tests) — E-prover integration, three-way strategy (requires `eprover` installed)
 - **`test_fol_gen.py`** (11 tests) — Prompt construction, response parsing, mocked LLM end-to-end
-- **`test_cot_verify.py`** (15 tests) — CoT parsing, step verification with real E-prover, mocked LLM end-to-end
+- **`test_cot_verify.py`** (18 tests) — CoT parsing, feedback construction, step verification with real E-prover, feedback loop with mocked LLM
 
-The LLM tests mock `generate()` to avoid network calls while still exercising the full parse → prove pipeline with real E-prover.
+The LLM tests mock `generate()`/`chat()` to avoid network calls while still exercising the full parse → prove pipeline with real E-prover.
 
 ## Usage
 

@@ -38,7 +38,7 @@ uv run python -m cotlog.eval --mode llm --limit 10 -v
 
 ### Chain-of-thought verification
 
-LLM produces step-by-step reasoning with FOL for each step, each step verified incrementally:
+LLM formalizes premises and produces step-by-step reasoning with FOL, each step verified against the LLM's own consistent vocabulary. Failed steps are fed back to the LLM for revision:
 
 ```bash
 uv run python -m cotlog.eval --mode cot --limit 10 -v
@@ -47,11 +47,27 @@ uv run python -m cotlog.eval --mode cot --limit 10 -v
 ### Options
 
 ```
---mode MODE      gold (default), llm, or cot
---model NAME     LLM model: sonnet (default), haiku, opus, or a full model ARN
---limit N        Evaluate only the first N examples
---cpu-limit N    E-prover CPU time limit per problem (default: 30s)
--v, --verbose    Print per-example results
+--mode MODE        gold (default), llm, or cot
+--model NAME       LLM model: sonnet (default), haiku, opus, or a full model ARN
+--limit N          Evaluate only the first N examples
+--cpu-limit N      E-prover CPU time limit per problem (default: 30s)
+--output-dir DIR   Directory for result files (default: results/)
+-v, --verbose      Print per-example results
+```
+
+### Result caching
+
+Each run writes two files to `results/` (or the directory specified by `--output-dir`):
+
+```
+results/{mode}_{YYYYMMDD_HHMMSS}.jsonl   — one JSON object per example
+results/{mode}_{YYYYMMDD_HHMMSS}.txt     — human-readable summary report
+```
+
+The JSONL file contains per-example records with gold/predicted labels, timing, error info, and mode-specific fields (e.g. `llm_response`, `szs_status` for LLM mode; `steps`, `verified_label`, `premise_fols`, `rounds` for CoT mode). Inspect with `jq`:
+
+```bash
+cat results/llm_*.jsonl | jq 'select(.correct == false)'
 ```
 
 ## How it works
@@ -69,7 +85,7 @@ uv run python -m cotlog.eval --mode cot --limit 10 -v
 
 **FOL Generation** (`src/cotlog/fol_gen.py`) — prompts the LLM with few-shot examples to translate NL premises/conclusion into FOL, then feeds the result through the standard prover pipeline.
 
-**CoT Verification** (`src/cotlog/cot_verify.py`) — prompts the LLM for step-by-step reasoning where each step includes a FOL formula. Each step is verified incrementally against the gold premises plus all previously verified steps, pinpointing exactly where reasoning chains break down.
+**CoT Verification** (`src/cotlog/cot_verify.py`) — multi-turn pipeline: the LLM first formalizes all premises into FOL using its own consistent vocabulary, then reasons step-by-step with a FOL formula per step. Each step is verified against the LLM's formalized premises plus previously verified steps. When steps fail, prover errors are fed back to the LLM for revision (up to 2 retries by default).
 
 ## Tests
 
