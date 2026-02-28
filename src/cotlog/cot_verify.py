@@ -83,6 +83,28 @@ class CotResult:
     conclusion_fol: str = ""
     rounds: int = 1
 
+    def to_record(self) -> dict:
+        """Convert to a JSON-serializable dict."""
+        return {
+            'llm_answer': self.llm_answer,
+            'verified_label': self.verified_label,
+            'all_steps_verified': self.all_steps_verified,
+            'premise_fols': self.premise_fols,
+            'conclusion_fol': self.conclusion_fol,
+            'rounds': self.rounds,
+            'raw_response': self.raw_response,
+            'steps': [
+                {
+                    'step_num': s.step_num,
+                    'reasoning': s.reasoning,
+                    'fol_str': s.fol_str,
+                    'verified': s.verified,
+                    'error': s.error,
+                }
+                for s in self.steps
+            ],
+        }
+
 
 def build_prompt(premises: list[str], conclusion: str) -> str:
     """Build the CoT verification prompt."""

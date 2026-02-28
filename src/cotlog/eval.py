@@ -194,7 +194,6 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
 
 def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: bool = False, model: str | None = None) -> dict:
     """Run all examples using CoT verification."""
-    from .cot import result_to_record
     from .cot_verify import verify_cot
 
     correct = 0
@@ -271,7 +270,7 @@ def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
             'elapsed_s': round(elapsed, 3),
         }
         if result is not None:
-            record.update(result_to_record(result))
+            record.update(result.to_record())
         records.append(record)
 
     accuracy = correct / total if total > 0 else 0.0
