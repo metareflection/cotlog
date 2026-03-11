@@ -67,10 +67,40 @@ uv run python -m cotlog.cot --json \
 
 The JSON file format is `{"premises": ["..."], "conclusion": "..."}`. Use `--max-retries N` to control feedback loop iterations, `--model` to pick a model, and `-v` for verbose step reasoning.
 
+### Refinement loop
+
+Uses formalization as a diagnostic tool to surface ambiguities in natural language, then refines the premises to remove them. See [REFINE.md](REFINE.md) for the full proposal.
+
+Run on the included examples:
+
+```bash
+uv run python -m cotlog --mode refine --data examples/refine-examples.jsonl -v
+```
+
+Or run the standalone demo:
+
+```bash
+uv run python examples/refine_demo.py
+```
+
+To add new examples, append to `examples/refine-examples.jsonl` — same format as FOLIO (the `premises-FOL` and `conclusion-FOL` fields can be empty since the loop generates its own):
+
+```json
+{"premises": ["...", "..."], "premises-FOL": [], "conclusion": "...", "conclusion-FOL": "", "label": "True"}
+```
+
+Refine-specific options:
+
+```
+--max-iterations N        Max refinement iterations (default: 3)
+--stability-n N           Independent formalizations per stability check (default: 5)
+--stability-threshold F   Structural agreement threshold to stop (default: 0.9)
+```
+
 ### Options
 
 ```
---mode MODE        gold (default), llm, or cot
+--mode MODE        gold (default), llm, cot, or refine
 --model NAME       LLM model: sonnet (default), haiku, opus, or a full model ARN
 --limit N          Evaluate only the first N examples
 --cpu-limit N      E-prover CPU time limit per problem (default: 30s)
