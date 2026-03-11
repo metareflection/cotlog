@@ -97,6 +97,18 @@ Refine-specific options:
 --stability-threshold F   Structural agreement threshold to stop (default: 0.9)
 ```
 
+### Claimcheck (NL ↔ FOL round-trip)
+
+Verifies whether FOL formalizations faithfully capture the original NL by informalizing the FOL back to English and comparing. See [CLAIMCHECK.md](CLAIMCHECK.md) for details and results.
+
+```bash
+# Check LLM-generated FOL against original NL
+uv run python -m cotlog.claimcheck --mode llm --data examples/refine-examples.jsonl -v
+
+# Check FOLIO's gold FOL annotations against original NL
+uv run python -m cotlog.claimcheck --mode gold --limit 20 -v
+```
+
 ### Options
 
 ```
