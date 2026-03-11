@@ -192,6 +192,89 @@ def evaluate_llm(examples: list[FolioExample], cpu_limit: int = 30, verbose: boo
     }
 
 
+def evaluate_refine(
+    examples: list[FolioExample],
+    cpu_limit: int = 30,
+    verbose: bool = False,
+    model: str | None = None,
+    max_iterations: int = 3,
+    stability_n: int = 5,
+    stability_threshold: float = 0.9,
+) -> dict:
+    """Run all examples through the refinement loop.
+
+    Reports stability improvement and faithfulness.
+    """
+    from .refine import refine_loop
+
+    total = 0
+    errors = 0
+    stability_improved = 0
+    total_delta_s = 0.0
+    records: list[dict] = []
+
+    for i, ex in enumerate(examples):
+        total += 1
+        t0 = time.monotonic()
+        error_msg: str | None = None
+        try:
+            result = refine_loop(
+                ex.premises, ex.conclusion,
+                model=model,
+                cpu_limit=cpu_limit,
+                max_iterations=max_iterations,
+                stability_n=stability_n,
+                stability_threshold=stability_threshold,
+                verbose=verbose,
+            )
+
+            s0 = result.initial_stability.agreement_rate if result.initial_stability else 0.0
+            sf = result.final_stability.agreement_rate if result.final_stability else 0.0
+            delta_s = sf - s0
+            total_delta_s += delta_s
+            if delta_s > 0:
+                stability_improved += 1
+
+            if verbose:
+                print(f"  [{i:3d}] S0={s0:.0%} Sf={sf:.0%} ΔS={delta_s:+.0%} "
+                      f"iters={result.total_iterations}")
+
+            record = {
+                'index': i,
+                'gold_label': ex.label,
+                'conclusion': ex.conclusion,
+                'premises': ex.premises,
+                'error': None,
+                'elapsed_s': round(time.monotonic() - t0, 3),
+            }
+            record.update(result.to_record())
+            records.append(record)
+
+        except Exception as e:
+            errors += 1
+            error_msg = str(e)
+            if verbose:
+                print(f"  [{i}] ERROR: {e}", file=sys.stderr)
+            records.append({
+                'index': i,
+                'gold_label': ex.label,
+                'conclusion': ex.conclusion,
+                'premises': ex.premises,
+                'error': error_msg,
+                'elapsed_s': round(time.monotonic() - t0, 3),
+            })
+
+    avg_delta_s = total_delta_s / total if total > 0 else 0.0
+
+    return {
+        'total': total,
+        'errors': errors,
+        'stability_improved': stability_improved,
+        'avg_delta_s': avg_delta_s,
+        'records': records,
+    }
+
+
 def evaluate_cot(examples: list[FolioExample], cpu_limit: int = 30, verbose: bool = False, model: str | None = None) -> dict:
     """Run all examples using CoT verification.
 
@@ -292,6 +375,9 @@ def print_report(results: dict, mode: str = 'gold') -> None:
     if mode == 'cot':
         _print_cot_report(results)
         return
+    if mode == 'refine':
+        _print_refine_report(results)
+        return
 
     print(f"Correct:  {results['correct']}")
     print(f"Accuracy: {results['accuracy']:.1%}")
@@ -323,6 +409,27 @@ def print_report(results: dict, mode: str = 'gold') -> None:
             print(f"  [{m['index']:3d}] gold={m['gold']:<10s} pred={m['predicted']:<10s} {detail}")
         if len(results['mismatches']) > 20:
             print(f"  ... and {len(results['mismatches']) - 20} more")
+
+
+def _print_refine_report(results: dict) -> None:
+    """Print refinement loop statistics."""
+    total = results['total']
+    print(f"\nRefinement Summary:")
+    print(f"  Stability improved:  {results['stability_improved']}/{total}"
+          f"  ({results['stability_improved']/total:.0%})" if total else "")
+    print(f"  Avg ΔS:              {results['avg_delta_s']:+.1%}")
+
+    # Per-example breakdown
+    for rec in results['records']:
+        if rec.get('error'):
+            continue
+        init = rec.get('initial_stability')
+        final = rec.get('final_stability')
+        if init and final:
+            s0 = init['agreement_rate']
+            sf = final['agreement_rate']
+            print(f"  [{rec['index']:3d}] S0={s0:.0%} → Sf={sf:.0%} "
+                  f"(ΔS={sf-s0:+.0%}, iters={rec.get('total_iterations', 0)})")
 
 
 def _print_cot_report(results: dict) -> None:
@@ -381,13 +488,16 @@ evaluate = evaluate_gold
 def main(argv: list[str] | None = None) -> None:
     import argparse
     parser = argparse.ArgumentParser(description='Run FOLIO evaluation')
-    parser.add_argument('--mode', choices=['gold', 'llm', 'cot'], default='gold',
-                        help='Evaluation mode: gold (gold FOL), llm (LLM FOL gen), cot (CoT verification)')
+    parser.add_argument('--mode', choices=['gold', 'llm', 'cot', 'refine'], default='gold',
+                        help='Evaluation mode: gold (gold FOL), llm (LLM FOL gen), cot (CoT verification), refine (refinement loop)')
     parser.add_argument('--model', type=str, default=None,
                         help='LLM model name (for llm/cot modes)')
     parser.add_argument('--data', type=Path, default=None, help='Path to FOLIO JSONL')
     parser.add_argument('--limit', type=int, default=None, help='Max examples to evaluate')
     parser.add_argument('--cpu-limit', type=int, default=30, help='E-prover CPU limit per problem')
+    parser.add_argument('--max-iterations', type=int, default=3, help='Max refinement iterations (refine mode)')
+    parser.add_argument('--stability-n', type=int, default=5, help='Number of independent formalizations for stability (refine mode)')
+    parser.add_argument('--stability-threshold', type=float, default=0.9, help='Stability threshold to stop (refine mode)')
     parser.add_argument('--output-dir', type=Path, default=Path('results'),
                         help='Directory for result files (default: results/)')
     parser.add_argument('--verbose', '-v', action='store_true')
@@ -408,6 +518,12 @@ def main(argv: list[str] | None = None) -> None:
         results = evaluate_llm(examples, cpu_limit=args.cpu_limit, verbose=args.verbose, model=args.model)
     elif args.mode == 'cot':
         results = evaluate_cot(examples, cpu_limit=args.cpu_limit, verbose=args.verbose, model=args.model)
+    elif args.mode == 'refine':
+        results = evaluate_refine(
+            examples, cpu_limit=args.cpu_limit, verbose=args.verbose, model=args.model,
+            max_iterations=args.max_iterations, stability_n=args.stability_n,
+            stability_threshold=args.stability_threshold,
+        )
     else:
         raise ValueError(f"Unknown mode: {args.mode}")
 
