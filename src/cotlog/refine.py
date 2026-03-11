@@ -517,6 +517,16 @@ def refine_loop(
         if stability.structural_agreement >= stability_threshold:
             break
 
+        # No-regression guard: if stability got worse, revert and stop
+        prev = (result.iterations[-2].stability.structural_agreement
+                if len(result.iterations) >= 2
+                else result.initial_stability.structural_agreement)
+        if stability.structural_agreement < prev:
+            if verbose:
+                print(f"    Regression detected ({prev:.0%} → {stability.structural_agreement:.0%}), reverting")
+            current_premises = iteration.nl  # revert to pre-refinement premises
+            break
+
     result.refined_premises = current_premises
     result.total_iterations = len(result.iterations)
     result.final_stability = (
