@@ -4,16 +4,17 @@ from cotlog.refine import refine_loop
 
 
 def main():
-    # Quantifier scope ambiguity + implicit assumptions:
-    # - "every student passed a test" — same test or different tests?
-    # - "the teacher praised everyone who passed" — passed what?
-    # - "not all students were praised" — contradicts if "passed" = "passed a test"
+    # Ambiguities:
+    # - "or" — inclusive or exclusive? (can a restaurant serve both?)
+    # - "No restaurant that serves Chinese food" — on Main Street, or anywhere?
+    # - "Some restaurants" — on Main Street specifically?
     premises = [
-        "Every student in the class passed a test.",
-        "The teacher praised everyone who passed.",
-        "Not all students in the class were praised by the teacher.",
+        "Every restaurant on Main Street serves Italian food or Chinese food.",
+        "No restaurant that serves Chinese food has a Michelin star.",
+        "Some restaurants on Main Street have a Michelin star.",
+        "All Michelin-starred restaurants are expensive.",
     ]
-    conclusion = "Some students passed a test but were not praised."
+    conclusion = "Some expensive restaurants on Main Street serve Italian food."
 
     result = refine_loop(
         premises, conclusion,
