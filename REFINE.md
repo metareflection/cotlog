@@ -230,6 +230,43 @@ A demonstration that **formal reasoning is useful as a specification refinement 
 
 The conceptual contribution: **the theory of autoformalization has been asking the wrong question.** The question is not "how do we guarantee F matches I." The question is "how do we use F to make I better." The guarantee is not about the formalization — it's about the *convergence* of the natural language toward unambiguity, as witnessed by formalization stability.
 
+## Lessons from Implementation
+
+We implemented the loop in Python (see `src/cotlog/refine.py`) using Claude via Bedrock for LLM steps and E-prover for reasoning, then ran it on 10 custom examples (`examples/refine-examples.jsonl`) and a subset of FOLIO. Key findings:
+
+### Structural agreement is the right convergence metric
+
+The document proposes three stability metrics: logical equivalence, structural equivalence, and entailment preservation. In practice, **entailment preservation is nearly useless** — it reads 100% on almost everything because structurally different formalizations tend to produce the same prover label (often "Uncertain" when the prover times out, or the same True/False when the conclusion is straightforward). It never triggered the refinement loop.
+
+Structural agreement (normalizing each premise's FOL to a canonical AST and comparing pairwise across independent formalizations) is the metric that actually discriminates. On our custom examples, initial structural agreement ranged from 54% to 100%, while entailment agreement was 80-100%. The loop should converge on structural agreement, with entailment preservation as a sanity check.
+
+### The loop works on naturally ambiguous text
+
+On 10 custom examples with everyday ambiguities, 4 had low initial structural stability. All 4 reached 100% after 1-2 iterations. The surfacer found substantive issues:
+
+- **Inclusive vs. exclusive "or"**: "serves Italian food or Chinese food" → "serves at least one of Italian food or Chinese food (and possibly both)"
+- **Necessary vs. sufficient conditions**: "To get a driver's license, you must pass both tests" was formalized inconsistently as necessary-condition vs. sufficient-condition across runs. Refinement produced separate premises for each direction.
+- **Implicit category membership**: "Tom owns a cat named Whiskers" does not entail Whiskers is a *pet* — the surfacer caught this and refinement added "keeps a cat as his pet."
+- **Normative vs. factual claims**: "must show a valid ID" was refined to "has a valid ID" to distinguish policy from state.
+
+Convergence is fast — most gains happen in iteration 1 (confirming H4).
+
+### FOLIO is the wrong evaluation substrate
+
+FOLIO premises are logic puzzles designed to be precise-but-tricky. The refinement loop either found nothing to do (already stable) or actively made things worse. On one FOLIO story (the Bonnie/talent-show premises), structural stability went from 71% to 31% — the refined NL was harder to formalize consistently than the original.
+
+The problem: when forced to "find ambiguities" in already-precise text, the surfacer invents issues that aren't there and "fixes" them in ways that change meaning. FOLIO tests logical reasoning, not specification quality. Better evaluation substrates would be software requirements, legal clauses, or API specifications — domains where ambiguity is a bug, not a feature.
+
+### Refinement is not monotonic
+
+The loop can make things worse. A rewrite that resolves one ambiguity may introduce new phrasing that the LLM formalizes less consistently. This suggests the loop needs a **no-regression guard**: if an iteration decreases structural stability, revert to the previous NL and stop.
+
+### Partial answers to open questions
+
+- **Can the loop be fully automated?** (Q2) Yes, for surfacing and proposing refinements. But the refiner LLM does introduce bias — it tends to "disambiguate" toward the most common reading rather than the intended one. The Bonnie example showed this: the LLM simplified a precise biconditional into a simpler conditional, losing information. For high-stakes use, human approval of refinements is warranted.
+- **Does stability imply correctness?** (Q3) No. On our "every student passed a test" demo, the refined premises reached 100% structural stability but changed the entailment label from True to False. The original True was vacuous (from contradictory premises), so the label flip was actually an improvement — but this shows stability and correctness are independent.
+- **Transfer across domains** (Q5) The custom examples (everyday reasoning about restaurants, drivers' licenses, committees) worked well. FOLIO (logic puzzles) did not. This suggests the approach is better suited to specification-like text than to pre-formalized domains.
+
 ## Open Questions
 
 1. **What fragment of FOL is sufficient?** Full FOL may be overkill for many NL statements. Could a restricted fragment (e.g., effectively propositional, or monadic FOL) capture enough to be useful while being easier to reason about?
