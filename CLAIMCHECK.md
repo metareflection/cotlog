@@ -107,7 +107,11 @@ Discrepancy categories:
 
 These aren't LLM errors — they're real losses in the gold annotations that have been invisible because FOLIO evaluation only checks entailment labels, not per-premise faithfulness.
 
-Note: some discrepancies may be false positives (the comparator being overly strict about phrasing differences). But the structural issues — XOR/biconditional confusion, converse implications, conjunction/disjunction errors — are genuine bugs in the gold annotations that could affect entailment correctness.
+**Important caveat: most of these discrepancies are false positives.** The 41% discrepancy rate dramatically overstates the real error rate. The core issue: FOL predicate names are opaque symbols, not semantic claims. When FOLIO writes `TalentShows(x)`, it *means* "x performs in school talent shows often" — the predicate name is shorthand. But the informalizer reads `TalentShows(x)` literally as "x is a talent show" and the comparator flags a mismatch. This is an artifact of the tool, not a bug in the annotations.
+
+This is the fundamental difference from Dafny claimcheck: Dafny specs have full `requires`/`ensures` contracts with real expressions, so the informalization has rich structure to work with. FOL predicates are closer to opaque function names — you need the NL premise (which the informalizer deliberately doesn't see) to know what they mean.
+
+The genuine logic errors — wrong connectives (`∨` vs `∧`), XOR/biconditional confusion, converse implications, semantic mismatches like `¬Love(mia, emma)` for "different favorite seasons" — are probably 5-10% of statements, not 41%. Separating these from naming-convention noise requires either manual review or a smarter comparator that ignores predicate-name losses (see [CLAIMCHECK_DEV.md](CLAIMCHECK_DEV.md)).
 
 ## Comparison with the Refinement Loop
 
