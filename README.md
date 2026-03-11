@@ -156,6 +156,10 @@ cat results/cot_*.jsonl | jq 'select(.all_steps_verified == false) | {index, con
 
 **CoT Verification** (`src/cotlog/cot_verify.py`) — multi-turn pipeline: the LLM formalizes all premises and the conclusion into FOL using its own consistent vocabulary, then reasons step-by-step with a FOL formula per step. Each step is verified against the LLM's formalized premises plus previously verified steps, and the conclusion is verified against the full accumulated knowledge. When steps fail, prover errors are fed back to the LLM for revision (up to 2 retries by default). No gold FOL is needed.
 
+**Claimcheck** (`src/cotlog/claimcheck.py`) — round-trip faithfulness verification: formalizes NL to FOL (or uses gold annotations), informalizes the FOL back to English without seeing the original, then compares the two English texts to find discrepancies. See [CLAIMCHECK.md](CLAIMCHECK.md).
+
+**Refinement Loop** (`src/cotlog/refine.py`) — experimental iterative refinement of NL premises via formalization. See [REFINE.md](REFINE.md) for the proposal and lessons learned.
+
 ## Tests
 
 ```bash
