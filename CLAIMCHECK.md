@@ -75,33 +75,39 @@ Discrepancies found were substantive:
 - "driving lessons" → `TookLessons(x)` — lost qualifier (weakened)
 - Type-guard additions: FOL adds `Restaurant(x)` or `Book(x)` guards that NL leaves implicit (strengthened)
 
-### FOLIO gold annotations (gold mode, 5 examples / 37 statements)
+### FOLIO gold annotations (gold mode, 50 examples / 338 statements)
 
 ```
-Total statements: 37
-Faithful: 5
-Discrepancies: 32
-Faithfulness rate: 14%
+Total statements: 338
+Faithful: 199
+Discrepancies: 139
+Faithfulness rate: 59%
 
 Discrepancy categories:
-  wrong-property: 10
-  weakened: 8
-  missing-aspect: 3
-  scope-change: 3
-  strengthened: 3
+  weakened: 36
+  wrong-property: 33
+  strengthened: 23
+  missing-aspect: 15
+  scope-change: 13
 ```
 
-The gold FOL annotations are systematically lossy:
+**41% of gold-annotated FOL statements have detectable faithfulness issues.** The discrepancies are systematic:
 
-1. **Predicate compression**: FOLIO uses compact predicate names (`TalentShows(x)` for "performs in school talent shows often", `Inactive(x)` for "inactive and disinterested members of their community"). The informalized version reads these predicates literally, revealing how much meaning is packed into naming conventions that the FOL doesn't formally capture.
+1. **Predicate compression** (weakened, missing-aspect): FOLIO packs rich NL into compact predicate names. `TalentShows(x)` for "performs in school talent shows often", `Love(emma, summer)` for "Emma's favorite season is summer" (drops the superlative), `Meetings(x)` for "schedules meetings with their customers" (drops "with customers").
 
-2. **Missing domain guards**: "All employees who..." is formalized as `∀x (P(x) → Q(x))` without an `Employee(x)` guard — the restriction to employees is lost, making the statement apply to everything.
+2. **Missing domain guards** (scope-change, strengthened): "All employees who..." → `∀x (P(x) → Q(x))` without an `Employee(x)` guard. "All students who want..." → `∀x (WantlongVacation(x) → ...)` without a `Student(x)` guard. The restriction to a subclass is lost.
 
-3. **XOR vs biconditional confusion**: "James is either (A and B) or (neither A nor B)" (a biconditional) is encoded as `A ⊕ B` (exclusive or between individual properties), which has opposite semantics.
+3. **XOR vs biconditional confusion** (wrong-property): "James is either (A and B) or (neither A nor B)" encodes a biconditional (A ↔ B), but FOLIO uses `A ⊕ B` (exclusive or between individual properties), which has opposite semantics — it means exactly one is true, not both-or-neither.
 
-4. **Dropped qualifiers**: "inactive and disinterested" → `Inactive(x)` drops "disinterested"; "meetings with their customers" → `Meetings(x)` drops "with customers".
+4. **Conjunction/disjunction errors** (wrong-property): "There are four seasons: Spring, Summer, Fall, and Winter" is formalized as `Season(spring) ∨ Season(summer) ∨ ...` — a disjunction (at least one is a season) instead of conjunction (all four are seasons).
+
+5. **Converse confusion** (wrong-property): "Composers write music pieces" (composer → writes) is formalized as `∀x∀y (MusicPiece(x) ∧ WrittenBy(x,y) → Composer(y))` (written-by → composer), which is the converse.
+
+6. **Semantic mismatch** (wrong-property): "Mia's favorite season is not the same as Emma's" → `¬Love(mia, emma)` ("Mia does not love Emma") — completely wrong property.
 
 These aren't LLM errors — they're real losses in the gold annotations that have been invisible because FOLIO evaluation only checks entailment labels, not per-premise faithfulness.
+
+Note: some discrepancies may be false positives (the comparator being overly strict about phrasing differences). But the structural issues — XOR/biconditional confusion, converse implications, conjunction/disjunction errors — are genuine bugs in the gold annotations that could affect entailment correctness.
 
 ## Comparison with the Refinement Loop
 
