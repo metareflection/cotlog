@@ -28,9 +28,11 @@ class ReasoningFindings:
 class StabilityResult:
     """Results from measuring formalization stability."""
     n_formalizations: int
-    agreement_rate: float  # fraction of runs agreeing on entailment label
-    labels: list[str]      # label from each independent formalization
-    errors: list[str]      # parse/prover errors
+    agreement_rate: float           # entailment-preservation: fraction agreeing on label
+    structural_agreement: float     # structural: avg per-premise AST match rate across pairs
+    labels: list[str]               # label from each independent formalization
+    formalizations: list[list[str]] # raw FOL strings per run
+    errors: list[str]               # parse/prover errors
 
 
 @dataclass
@@ -82,7 +84,9 @@ def _stability_to_dict(s: StabilityResult | None) -> dict | None:
     return {
         'n_formalizations': s.n_formalizations,
         'agreement_rate': s.agreement_rate,
+        'structural_agreement': s.structural_agreement,
         'labels': s.labels,
+        'formalizations': s.formalizations,
         'errors': s.errors,
     }
 
@@ -301,6 +305,52 @@ def refine(
 
 # ── Step 5: MEASURE STABILITY ────────────────────────────────────────────────
 
+def _normalize_fol(fol_str: str) -> str:
+    """Normalize a FOL string for structural comparison.
+
+    Parses to AST, renders to TPTP (which normalizes variable case,
+    predicate names, etc.), then returns the canonical string.
+    Falls back to lowercased stripped string if parsing fails.
+    """
+    try:
+        ast = parse_fol(fol_str)
+        return formula_to_tptp(ast)
+    except Exception:
+        return fol_str.strip().lower()
+
+
+def _structural_agreement(formalizations: list[list[str]]) -> float:
+    """Compute pairwise structural agreement across formalizations.
+
+    For each pair of runs, check what fraction of premises have identical
+    normalized FOL. Return the average across all pairs.
+    """
+    if len(formalizations) < 2:
+        return 1.0
+
+    n_premises = min(len(f) for f in formalizations) if formalizations else 0
+    if n_premises == 0:
+        return 0.0
+
+    # Normalize all formalizations
+    normalized = [
+        [_normalize_fol(f[i]) for i in range(n_premises)]
+        for f in formalizations
+    ]
+
+    # Pairwise comparison
+    pair_scores = []
+    for i in range(len(normalized)):
+        for j in range(i + 1, len(normalized)):
+            matches = sum(
+                1 for k in range(n_premises)
+                if normalized[i][k] == normalized[j][k]
+            )
+            pair_scores.append(matches / n_premises)
+
+    return sum(pair_scores) / len(pair_scores) if pair_scores else 1.0
+
+
 def measure_stability(
     premises: list[str],
     conclusion: str,
@@ -311,10 +361,12 @@ def measure_stability(
 ) -> StabilityResult:
     """Formalize n times independently and measure agreement.
 
-    Uses entailment-preservation: do all n formalizations yield the same
-    True/False/Uncertain label for the conclusion?
+    Reports two metrics:
+    - entailment-preservation: do all formalizations yield the same label?
+    - structural agreement: do per-premise FOL ASTs match across runs?
     """
     labels: list[str] = []
+    all_formalizations: list[list[str]] = []
     errors: list[str] = []
 
     for i in range(n):
@@ -324,6 +376,7 @@ def measure_stability(
             p_fol, c_fol, _ = formalize(
                 premises, conclusion, model=model, temperature=temp,
             )
+            all_formalizations.append(p_fol + [c_fol])
             premises_ast = [parse_fol(p) for p in p_fol]
             conjecture_ast = parse_fol(c_fol)
             result = prove_example(
@@ -338,7 +391,7 @@ def measure_stability(
             errors.append(f"Run {i}: {e}")
             labels.append('Error')
 
-    # Agreement rate: fraction matching the majority label
+    # Entailment agreement: fraction matching the majority label
     if labels:
         from collections import Counter
         counts = Counter(labels)
@@ -347,10 +400,14 @@ def measure_stability(
     else:
         agreement_rate = 0.0
 
+    structural = _structural_agreement(all_formalizations)
+
     return StabilityResult(
         n_formalizations=n,
         agreement_rate=agreement_rate,
+        structural_agreement=structural,
         labels=labels,
+        formalizations=all_formalizations,
         errors=errors,
     )
 
@@ -399,9 +456,10 @@ def refine_loop(
         n=stability_n, model=model, cpu_limit=cpu_limit,
     )
     if verbose:
-        print(f"  Initial stability: {result.initial_stability.agreement_rate:.0%}")
+        s = result.initial_stability
+        print(f"  Initial stability: entailment={s.agreement_rate:.0%} structural={s.structural_agreement:.0%}")
 
-    if result.initial_stability.agreement_rate >= stability_threshold:
+    if result.initial_stability.structural_agreement >= stability_threshold:
         result.final_stability = result.initial_stability
         return result
 
@@ -454,9 +512,9 @@ def refine_loop(
         result.iterations.append(iteration)
 
         if verbose:
-            print(f"    Stability: {stability.agreement_rate:.0%}")
+            print(f"    Stability: entailment={stability.agreement_rate:.0%} structural={stability.structural_agreement:.0%}")
 
-        if stability.agreement_rate >= stability_threshold:
+        if stability.structural_agreement >= stability_threshold:
             break
 
     result.refined_premises = current_premises

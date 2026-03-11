@@ -228,16 +228,18 @@ def evaluate_refine(
                 verbose=verbose,
             )
 
-            s0 = result.initial_stability.agreement_rate if result.initial_stability else 0.0
-            sf = result.final_stability.agreement_rate if result.final_stability else 0.0
+            s0 = result.initial_stability.structural_agreement if result.initial_stability else 0.0
+            sf = result.final_stability.structural_agreement if result.final_stability else 0.0
             delta_s = sf - s0
             total_delta_s += delta_s
             if delta_s > 0:
                 stability_improved += 1
 
             if verbose:
-                print(f"  [{i:3d}] S0={s0:.0%} Sf={sf:.0%} ΔS={delta_s:+.0%} "
-                      f"iters={result.total_iterations}")
+                e0 = result.initial_stability.agreement_rate if result.initial_stability else 0.0
+                ef = result.final_stability.agreement_rate if result.final_stability else 0.0
+                print(f"  [{i:3d}] structural: {s0:.0%}→{sf:.0%} (Δ={delta_s:+.0%})  "
+                      f"entailment: {e0:.0%}→{ef:.0%}  iters={result.total_iterations}")
 
             record = {
                 'index': i,
@@ -426,10 +428,13 @@ def _print_refine_report(results: dict) -> None:
         init = rec.get('initial_stability')
         final = rec.get('final_stability')
         if init and final:
-            s0 = init['agreement_rate']
-            sf = final['agreement_rate']
-            print(f"  [{rec['index']:3d}] S0={s0:.0%} → Sf={sf:.0%} "
-                  f"(ΔS={sf-s0:+.0%}, iters={rec.get('total_iterations', 0)})")
+            s0 = init['structural_agreement']
+            sf = final['structural_agreement']
+            e0 = init['agreement_rate']
+            ef = final['agreement_rate']
+            print(f"  [{rec['index']:3d}] structural: {s0:.0%}→{sf:.0%}  "
+                  f"entailment: {e0:.0%}→{ef:.0%}  "
+                  f"(iters={rec.get('total_iterations', 0)})")
 
 
 def _print_cot_report(results: dict) -> None:
