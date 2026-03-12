@@ -50,12 +50,20 @@ uv run python -m cotlog.claimcheck --mode gold --limit 20 -v
 
 Each run writes a JSONL file to `results/claimcheck_{mode}_{timestamp}.jsonl` with per-statement verdicts, FOL, back-translations, and discrepancy categories.
 
-Discrepancy categories:
-- **weakened**: FOL says less than the original
-- **strengthened**: FOL says more than the original
-- **scope-change**: quantifier scope or domain differs
-- **missing-aspect**: original has a nuance the FOL dropped
-- **wrong-property**: FOL captures a different property entirely
+Each discrepancy is classified by category and severity (structural or surface).
+
+Structural categories (real logic errors):
+- **wrong-connective**: ∧/∨/→/↔/⊕ confusion
+- **converse**: implication direction reversed
+- **wrong-quantifier**: ∀/∃ confusion or missing restriction that changes domain
+- **wrong-property**: FOL captures a completely different property or relation
+- **wrong-arity**: wrong argument count or swapped argument order
+
+Surface categories (inherent FOL limitations):
+- **predicate-naming**: predicate name doesn't capture full NL meaning
+- **missing-guard**: implicit type restriction absent
+- **modality-loss**: deontic/epistemic nuance dropped
+- **tense-loss**: temporal distinctions lost
 
 ## Results
 
@@ -75,7 +83,9 @@ Discrepancies found were substantive:
 - "driving lessons" → `TookLessons(x)` — lost qualifier (weakened)
 - Type-guard additions: FOL adds `Restaurant(x)` or `Book(x)` guards that NL leaves implicit (strengthened)
 
-### FOLIO gold annotations (gold mode, 50 examples / 338 statements)
+### FOLIO gold annotations — v1 flat comparator (50 examples / 338 statements)
+
+The initial comparator treated all discrepancies equally:
 
 ```
 Total statements: 338
@@ -91,27 +101,55 @@ Discrepancy categories:
   scope-change: 13
 ```
 
-**41% of gold-annotated FOL statements have detectable faithfulness issues.** The discrepancies are systematic:
+**The 41% discrepancy rate was misleading.** Most flagged issues were predicate-naming noise (e.g., `TalentShows(x)` read literally as "x is a talent show"), not real logic errors. The flat comparator couldn't distinguish the two.
 
-1. **Predicate compression** (weakened, missing-aspect): FOLIO packs rich NL into compact predicate names. `TalentShows(x)` for "performs in school talent shows often", `Love(emma, summer)` for "Emma's favorite season is summer" (drops the superlative), `Meetings(x)` for "schedules meetings with their customers" (drops "with customers").
+### FOLIO gold annotations — v2 two-tier comparator (10 examples / 73 statements)
 
-2. **Missing domain guards** (scope-change, strengthened): "All employees who..." → `∀x (P(x) → Q(x))` without an `Employee(x)` guard. "All students who want..." → `∀x (WantlongVacation(x) → ...)` without a `Student(x)` guard. The restriction to a subclass is lost.
+The comparator was rewritten to classify each discrepancy as **structural** (real logic error that could change truth values) or **surface** (inherent FOL expressivity loss):
 
-3. **XOR vs biconditional confusion** (wrong-property): "James is either (A and B) or (neither A nor B)" encodes a biconditional (A ↔ B), but FOLIO uses `A ⊕ B` (exclusive or between individual properties), which has opposite semantics — it means exactly one is true, not both-or-neither.
+```
+Total statements: 73
+Faithful: 29
+Structural errors: 40
+Surface noise: 4
+Faithfulness rate (structural only): 45%
+Faithfulness rate (all discrepancies): 40%
 
-4. **Conjunction/disjunction errors** (wrong-property): "There are four seasons: Spring, Summer, Fall, and Winter" is formalized as `Season(spring) ∨ Season(summer) ∨ ...` — a disjunction (at least one is a season) instead of conjunction (all four are seasons).
+Structural categories:
+  wrong-property: 15
+  wrong-connective: 9
+  wrong-quantifier: 9
 
-5. **Converse confusion** (wrong-property): "Composers write music pieces" (composer → writes) is formalized as `∀x∀y (MusicPiece(x) ∧ WrittenBy(x,y) → Composer(y))` (written-by → composer), which is the converse.
+Surface categories:
+  predicate-naming: 2
+  missing-guard: 1
+  modality-loss: 1
+```
 
-6. **Semantic mismatch** (wrong-property): "Mia's favorite season is not the same as Emma's" → `¬Love(mia, emma)` ("Mia does not love Emma") — completely wrong property.
+**The two-tier split works** — surface noise is small and correctly classified. Predicate-naming issues like `Meetings(x)` for "schedules meetings with customers" now land in the surface bucket instead of inflating the error count.
 
-These aren't LLM errors — they're real losses in the gold annotations that have been invisible because FOLIO evaluation only checks entailment labels, not per-premise faithfulness.
+**But the structural rate is still high (55%).** This is partly real and partly an artifact of the sample:
 
-**Important caveat: most of these discrepancies are false positives.** The 41% discrepancy rate dramatically overstates the real error rate. The core issue: FOL predicate names are opaque symbols, not semantic claims. When FOLIO writes `TalentShows(x)`, it *means* "x performs in school talent shows often" — the predicate name is shorthand. But the informalizer reads `TalentShows(x)` literally as "x is a talent show" and the comparator flags a mismatch. This is an artifact of the tool, not a bug in the annotations.
+1. **Repeated premises**: Examples 6-8 share the same monkeypox story (same gold FOL), so the same `wrong-quantifier` errors (existential where universal is meant) are counted three times.
 
-This is the fundamental difference from Dafny claimcheck: Dafny specs have full `requires`/`ensures` contracts with real expressions, so the informalization has rich structure to work with. FOL predicates are closer to opaque function names — you need the NL premise (which the informalizer deliberately doesn't see) to know what they mean.
+2. **Statement misalignment**: Example 9 has gold FOL statements shifted relative to the NL premises, causing a cascade of `wrong-property` flags. This is a genuine dataset bug.
 
-The genuine logic errors — wrong connectives (`∨` vs `∧`), XOR/biconditional confusion, converse implications, semantic mismatches like `¬Love(mia, emma)` for "different favorite seasons" — are probably 5-10% of statements, not 41%. Separating these from naming-convention noise requires either manual review or a smarter comparator that ignores predicate-name losses (see [CLAIMCHECK_DEV.md](CLAIMCHECK_DEV.md)).
+3. **Real connective errors**: XOR vs biconditional confusion (`⊕` where `↔` is meant) is correctly caught across multiple examples.
+
+**Structural error categories explained:**
+
+- **wrong-connective**: ∧/∨/→/↔/⊕ confusion. Most common: "A and B or neither A nor B" (biconditional) formalized as `A ⊕ B` (exclusive or), which has opposite semantics.
+- **wrong-quantifier**: ∀/∃ confusion. Common in FOLIO: definitional claims ("Monkeypox is a disease caused by...") formalized as existential claims (`∃x`).
+- **wrong-property**: FOL captures a completely different property. Includes statement misalignment bugs and semantic mismatches like `¬Love(mia, emma)` for "different favorite seasons."
+
+**Surface noise categories explained:**
+
+- **predicate-naming**: Predicate name doesn't capture full NL meaning — the predicate is opaque shorthand, not a semantic claim.
+- **missing-guard**: Implicit type restriction absent (e.g., "all employees who..." without `Employee(x)` guard) — defensible in closed-world settings.
+- **modality-loss**: Deontic/epistemic nuance dropped ("must file" → "files", "feel tired" → "is tired") — FOL has no modality.
+- **tense-loss**: Temporal distinctions lost — FOL is atemporal.
+
+A full run on all 50 examples (or the full 204 validation set) is needed to get stable numbers. The structural rate should settle lower once the repeated-premise inflation is accounted for.
 
 ## Comparison with the Refinement Loop
 
@@ -142,4 +180,4 @@ meeting..."                                       in company."
 Components:
 - **Formalizer** (`fol_gen.py`): LLM translates NL → FOL (skipped in gold mode)
 - **Informalizer** (`claimcheck.py`): LLM translates FOL → English without seeing original NL
-- **Comparator** (`claimcheck.py`): LLM compares original NL vs back-translation, reports discrepancies with categories
+- **Comparator** (`claimcheck.py`): LLM compares original NL vs back-translation, classifies discrepancies as structural (logic errors) or surface (expressivity losses)
