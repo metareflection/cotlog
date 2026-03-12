@@ -102,12 +102,16 @@ Ordered by effort/impact:
 
 1. ~~**Tighten the comparator prompt**~~ ✓ Done — two-tier comparator implemented.
 
-2. **Validate the two-tier split**: Re-run on FOLIO 50 gold and manually check whether structural vs surface classification is accurate. If most former false positives land in surface, the structural faithfulness rate should be in the 90-95% range.
+2. ~~**Validate the two-tier split**~~ ✓ Done — full run on 204 FOLIO validation examples. Manual audit of all 150 unique structural errors.
 
-3. **Run full FOLIO** (medium effort, medium impact): 204 validation examples. Gets us a publishable number with statistical significance.
+3. ~~**Run full FOLIO**~~ ✓ Done — 1292 statements. Raw structural rate: 22%. After manual audit reclassifying predicate-naming false positives: ~10% true structural error rate (~90% faithfulness). Results in CLAIMCHECK_FOLIO.md.
 
-4. **Sample validation** (medium effort, high impact): Manually review 30-50 flagged structural discrepancies. Classify each as true-positive (real logic error) or false-positive (misclassified noise). This gives us precision on the structural tier.
+4. ~~**Sample validation**~~ ✓ Done — audited all 150 unique structural errors. ~55 genuinely structural, ~60 should be surface (predicate-naming misclassified as wrong-property), ~35 debatable. Standalone error report for FOLIO maintainers in FOLIO_REPORT.md.
 
-5. **Cross-dataset** (high effort, high impact): Run on LogicNLI or ProofWriter. If we find similar rates, the story is "FOL annotation quality is systematically worse than assumed."
+5. **Re-run on new FOLIO version**: We used v0.0 (old). The HuggingFace version (https://huggingface.co/datasets/yale-nlp/FOLIO) has "significant quality improvement and error fixing." Need to pull the new version, update the loader, and re-run to see which errors are fixed and which persist. This is the immediate next step.
 
-6. **Unify with Dafny claimcheck** (high effort, medium impact): Makes sense long-term but not urgent for validating the approach.
+6. **Fix predicate-naming blind spot**: ~40% of "structural" flags were actually predicate-naming issues the comparator misclassified. When `Wedding(x)` back-translates as "x is a wedding," the comparator calls it wrong-property instead of predicate-naming. The prompt needs a stronger rule: if the FOL skeleton (quantifiers, connectives, variable bindings) matches and only the predicate gloss differs, classify as surface.
+
+7. **Cross-dataset** (high effort, high impact): Run on LogicNLI or ProofWriter. If we find similar rates, the story is "FOL annotation quality is systematically worse than assumed."
+
+8. **Unify with Dafny claimcheck** (high effort, medium impact): Makes sense long-term but not urgent for validating the approach.

@@ -467,3 +467,46 @@ C:  If Subway provides take-out service and receives many negative
 | XOR for inclusive-or | ~3 | 84-86, 128-131 |
 
 Errors were detected automatically via round-trip verification (FOL → English → compare against original NL) using `cotlog.claimcheck` and confirmed by manual review. An additional ~60 flagged discrepancies were false positives due to predicate-naming conventions and were excluded from this report.
+
+---
+
+## FOLIO v2 comparison (2026-03-11)
+
+The Yale NLP group released a revised dataset (`folio_v2_validation.jsonl`, 203 examples) on [HuggingFace](https://huggingface.co/datasets/yale-nlp/FOLIO). We checked every error above against v2 by matching examples on premise text (indices shifted due to removals).
+
+### Status of each error in v2
+
+| # | Error | v1 indices | v2 status | Notes |
+|---|---|---|---|---|
+| 1 | XOR for biconditional | 3–5 | **Fixed** | P7 FOL now uses `¬(A ⊕ B)` (= A ↔ B). NL rewritten to explicit biconditional. v2 keeps only 1 of the 3 examples. |
+| 2 | De Morgan (Marvin) | 27–29 | **Fixed** | NL rewritten ("either both or neither"). FOL uses `¬(A ⊕ B)`. Gold label for "Marvin is an alien" changed from False to Uncertain. |
+| 2b | De Morgan (wedding/Paris) | 128–131 | **Removed** | Entire problem set deleted from v2. |
+| 3 | De Morgan in conclusion (KO) | 73 | **Fixed** | Conclusion FOL now correctly uses `¬A ∧ ¬B` for "neither A nor B." |
+| 4a | Misalignment (wild turkeys) | 9–11 | **Fixed** | P1 no longer split across lines; 6 FOL formulas for 6 premises. |
+| 4b | Misalignment (rental/cat) | 93 | **Fixed** | Problem restructured with additional premises; all FOLs aligned. |
+| 4c | Misalignment (GRE/ETS) | 105–107 | **Fixed** | Problem restructured; all FOLs aligned. |
+| 4d | Misalignment (salad/health) | 173–175 | **Fixed** | Problem substantially rewritten; all FOLs aligned. |
+| 5 | Semantic mismatch (Mia/Emma) | 46–48 | **Fixed** | P4 FOL now uses `∀x ∀y (Season(x) ∧ Season(y) ∧ Favorite(mia,x) ∧ Favorite(emma,y) → ¬(x=y))`. |
+| 6 | Converse implication (Beethoven) | 36–38 | **Fixed** | P2 FOL now `∀x (MusicPiece(x) → ∃y (Composer(y) ∧ Write(y,x)))`. However, v2 P7 has a new precedence issue with `∃y` scoping. |
+| 7 | Wrong arity (Karen/Share) | 21–23 | **Fixed** | `Share(x, lisa)` → `ShareWith(karen, x, lisa)` (3-ary). |
+| 8 | Wrong arity/order (du Maurier) | 194–196 | **Partially fixed** | P1 fixed (`WinnerOf(steinhauer, ...)`), but P2 and P5 still have tournament as first argument. |
+| 9 | Wrong quantifier (koala) | 96–98 | **Removed** | Entire problem set deleted from v2. |
+| 10 | Operator precedence (Picuris) | 112–114 | **Fixed** | Parentheses added: `MountainRange(pm) ∧ (In(pm, NM) ⊕ In(pm, TX))`. Uses XOR, defensible for mutually exclusive locations. |
+| 11 | Negation inversion (Mary/jobs) | 76–78 | **Fixed** | Predicate renamed from `NotPicky` to `PickyEater`, eliminating the double-negation bug. |
+| 12 | XOR for inclusive-or (Subway) | 84–86 | **Not fixed** | Still uses ⊕ where ∨ is needed. P4 (popular → rating > threshold) makes both disjuncts simultaneously satisfiable. |
+
+### New issues introduced in v2
+
+- **Beethoven P7 (v2 index 38):** `∀x (Orchestra(x) → (∃y Conductor(y) ∧ Lead(y, x)))` — likely missing parentheses around the existential body, leaving `Lead(y, x)` with `y` potentially unbound depending on parser precedence.
+- **Subway P5 (v2 index 85):** The universal quantifier `∀x` scopes over the rating variable but not the popularity predicate, creating a structural mismatch.
+
+### Overall
+
+| Outcome | Count |
+|---|---|
+| Fixed | 9 |
+| Removed | 2 |
+| Partially fixed | 1 |
+| Not fixed | 1 |
+
+Most fixes were achieved by rewriting the NL premises rather than only correcting the FOL — v2 is substantially revised, not just patched. The dataset shrank from 204 to 203 validation examples.
