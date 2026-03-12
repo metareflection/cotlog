@@ -280,7 +280,7 @@ def claimcheck(
             match=comp.get("match", True),
             discrepancy=comp.get("discrepancy", ""),
             category=comp.get("category", "none"),
-            severity=comp.get("severity", "structural"),
+            severity=comp.get("severity", "surface"),
         ))
 
     # Conclusion
@@ -348,7 +348,7 @@ def claimcheck_gold(
             match=comp.get("match", True),
             discrepancy=comp.get("discrepancy", ""),
             category=comp.get("category", "none"),
-            severity=comp.get("severity", "structural"),
+            severity=comp.get("severity", "surface"),
         ))
 
     # Conclusion
