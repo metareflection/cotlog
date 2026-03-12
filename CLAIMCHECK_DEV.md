@@ -77,16 +77,37 @@ Alternative: give the informalizer a predicate glossary extracted from the forma
 
 Trade-off: this reduces noise but also reduces the tool's ability to catch predicate-naming bugs (where the name is actively misleading, not just abbreviated).
 
+## Status: Two-tier comparator (Proposal 1) — implemented
+
+The comparator prompt has been rewritten to distinguish **structural** errors from **surface** noise. Each discrepancy now carries a `severity` field.
+
+**Structural categories** (count as failures — these affect logical correctness):
+- `wrong-connective`: ∧/∨/→/↔/⊕ confusion
+- `converse`: implication direction reversed
+- `wrong-quantifier`: ∀/∃ confusion or missing restriction that changes domain
+- `wrong-property`: completely different property or relation
+- `wrong-arity`: wrong argument count or swapped argument order
+
+**Surface categories** (reported but don't count as failures — inherent FOL limitations):
+- `predicate-naming`: predicate name doesn't capture full NL meaning (opaque symbol)
+- `missing-guard`: implicit type restriction absent (defensible in closed-world)
+- `modality-loss`: deontic/epistemic nuance dropped
+- `tense-loss`: temporal distinctions lost
+
+The report now shows two faithfulness rates: structural-only (the meaningful number) and all-discrepancies (for reference). The per-example report uses `✗` for structural, `~` for surface, `✓` for match.
+
 ## What to do next
 
 Ordered by effort/impact:
 
-1. **Tighten the comparator prompt** (low effort, high impact): Tell it to ignore predicate-naming losses and focus on structural/logical differences. Re-run on FOLIO 50 to get a cleaner faithfulness number.
+1. ~~**Tighten the comparator prompt**~~ ✓ Done — two-tier comparator implemented.
 
-2. **Run full FOLIO** (medium effort, medium impact): 204 validation examples. Gets us a publishable number with statistical significance.
+2. **Validate the two-tier split**: Re-run on FOLIO 50 gold and manually check whether structural vs surface classification is accurate. If most former false positives land in surface, the structural faithfulness rate should be in the 90-95% range.
 
-3. **Sample validation** (medium effort, high impact): Manually review 30-50 flagged discrepancies. Classify each as true-positive (real logic error) or false-positive (naming noise). This gives us precision.
+3. **Run full FOLIO** (medium effort, medium impact): 204 validation examples. Gets us a publishable number with statistical significance.
 
-4. **Cross-dataset** (high effort, high impact): Run on LogicNLI or ProofWriter. If we find similar rates, the story is "FOL annotation quality is systematically worse than assumed."
+4. **Sample validation** (medium effort, high impact): Manually review 30-50 flagged structural discrepancies. Classify each as true-positive (real logic error) or false-positive (misclassified noise). This gives us precision on the structural tier.
 
-5. **Unify with Dafny claimcheck** (high effort, medium impact): Makes sense long-term but not urgent for validating the approach.
+5. **Cross-dataset** (high effort, high impact): Run on LogicNLI or ProofWriter. If we find similar rates, the story is "FOL annotation quality is systematically worse than assumed."
+
+6. **Unify with Dafny claimcheck** (high effort, medium impact): Makes sense long-term but not urgent for validating the approach.

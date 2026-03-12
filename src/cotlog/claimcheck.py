@@ -28,6 +28,7 @@ class PremiseResult:
     match: bool
     discrepancy: str  # empty if match
     category: str     # none, weakened, strengthened, scope-change, missing-aspect, wrong-property
+    severity: str = "structural"  # structural (real logic error) or surface (naming/expressivity noise)
 
 
 @dataclass
@@ -61,6 +62,7 @@ class ClaimcheckResult:
                     'match': r.match,
                     'discrepancy': r.discrepancy,
                     'category': r.category,
+                    'severity': r.severity,
                 }
                 for r in self.premise_results
             ],
@@ -121,8 +123,9 @@ def _informalize(fol_strings: list[str], *, model: str | None = None) -> tuple[l
 
 _COMPARE_SYSTEM = (
     "You are a specification auditor. You compare original natural language "
-    "statements against back-translations produced from formal logic. "
-    "Be STRICT — flag any meaning change, not just phrasing differences."
+    "statements against back-translations produced from first-order logic. "
+    "Your job is to distinguish STRUCTURAL logic errors from SURFACE-level "
+    "losses that are inherent to FOL's limited expressivity."
 )
 
 _COMPARE_TEMPLATE = """\
@@ -133,23 +136,45 @@ the original.
 
 {pairs}
 
-For each pair, determine:
-1. Do they express the same meaning? (yes/no)
-2. If no, what specifically changed? Categorize as one of:
-   - weakened: the FOL says less than the original
-   - strengthened: the FOL says more than the original
-   - scope-change: quantifier scope or domain differs
-   - missing-aspect: the original has a nuance the FOL dropped
-   - wrong-property: the FOL captures a different property entirely
+For each pair, classify the comparison into one of three outcomes:
 
-Focus on MEANING, not phrasing. "All cats are mammals" and "Every cat is a \
-mammal" match. But "All cats are mammals" and "Some cats are mammals" do not.
+**MATCH** — They express the same core logical meaning. Ignore phrasing \
+differences. "All cats are mammals" and "Every cat is a mammal" match.
+
+**STRUCTURAL discrepancy** — The logical structure is wrong. These are real \
+errors that could change truth values or entailment. Flag these:
+  - wrong-connective: ∧/∨/→/↔/⊕ confusion (e.g., "and" rendered as "or")
+  - converse: implication direction reversed ("A implies B" vs "B implies A")
+  - wrong-quantifier: ∀/∃ confusion, or missing quantifier restriction that \
+changes the domain of quantification
+  - wrong-property: FOL captures a completely different property or relation
+  - wrong-arity: predicate has wrong number of arguments or argument order \
+is swapped
+
+**SURFACE discrepancy** — The FOL lost nuance, but the core logical claim is \
+preserved. These are inherent FOL limitations, NOT errors. Flag but mark as \
+surface:
+  - predicate-naming: predicate name doesn't capture full NL meaning \
+(e.g., "Signed(x)" for "signed by the author" — the predicate is shorthand)
+  - missing-guard: implicit type restriction not explicit in FOL \
+(e.g., "all employees who..." without Employee(x) guard — defensible in \
+closed-world)
+  - modality-loss: deontic/epistemic nuance dropped ("must file" → "files")
+  - tense-loss: temporal distinctions lost ("has hosted" vs "hosts")
+
+IMPORTANT: FOL predicate names are opaque symbols. If the back-translation \
+says "x is a talent show" but the original says "x performs in school talent \
+shows often", and the ONLY difference is what the predicate name captures, \
+that is a SURFACE issue (predicate-naming), not a structural error. \
+The predicate TalentShows(x) is just shorthand — it does not claim x IS a \
+talent show.
 
 Respond in this exact JSON format:
 ```json
 [
-  {{"index": 0, "match": true, "discrepancy": "", "category": "none"}},
-  {{"index": 1, "match": false, "discrepancy": "Original says X but back-translation says Y", "category": "weakened"}}
+  {{"index": 0, "match": true, "discrepancy": "", "category": "none", "severity": "none"}},
+  {{"index": 1, "match": false, "discrepancy": "Original says A implies B but back-translation reverses the direction", "category": "converse", "severity": "structural"}},
+  {{"index": 2, "match": false, "discrepancy": "Predicate name does not capture full meaning", "category": "predicate-naming", "severity": "surface"}}
 ]
 ```"""
 
@@ -246,7 +271,7 @@ def claimcheck(
     comp_by_index = {c["index"]: c for c in comparisons}
 
     for i, premise in enumerate(premises):
-        comp = comp_by_index.get(i, {"match": True, "discrepancy": "", "category": "none"})
+        comp = comp_by_index.get(i, {"match": True, "discrepancy": "", "category": "none", "severity": "none"})
         result.premise_results.append(PremiseResult(
             index=i,
             original=premise,
@@ -255,6 +280,7 @@ def claimcheck(
             match=comp.get("match", True),
             discrepancy=comp.get("discrepancy", ""),
             category=comp.get("category", "none"),
+            severity=comp.get("severity", "structural"),
         ))
 
     # Conclusion
@@ -313,7 +339,7 @@ def claimcheck_gold(
     comp_by_index = {c["index"]: c for c in comparisons}
 
     for i, premise in enumerate(premises):
-        comp = comp_by_index.get(i, {"match": True, "discrepancy": "", "category": "none"})
+        comp = comp_by_index.get(i, {"match": True, "discrepancy": "", "category": "none", "severity": "none"})
         result.premise_results.append(PremiseResult(
             index=i,
             original=premise,
@@ -322,6 +348,7 @@ def claimcheck_gold(
             match=comp.get("match", True),
             discrepancy=comp.get("discrepancy", ""),
             category=comp.get("category", "none"),
+            severity=comp.get("severity", "structural"),
         ))
 
     # Conclusion
@@ -341,6 +368,9 @@ def print_report(results: list[ClaimcheckResult]) -> None:
     total_premises = 0
     mismatches = 0
 
+    structural = 0
+    surface = 0
+
     for i, r in enumerate(results):
         print(f"\n{'─'*60}")
         print(f"Example {i}")
@@ -348,18 +378,26 @@ def print_report(results: list[ClaimcheckResult]) -> None:
 
         for pr in r.premise_results:
             total_premises += 1
-            status = "✓" if pr.match else "✗"
             if not pr.match:
                 mismatches += 1
+                if pr.severity == "surface":
+                    surface += 1
+                    status = "~"
+                else:
+                    structural += 1
+                    status = "✗"
+            else:
+                status = "✓"
             print(f"  {status} P{pr.index+1}: {pr.original}")
             if not pr.match:
                 print(f"       FOL: {pr.fol}")
                 print(f"       Back: {pr.back_translation}")
-                print(f"       Issue: {pr.discrepancy} [{pr.category}]")
+                print(f"       Issue: {pr.discrepancy} [{pr.category}] ({pr.severity})")
 
         status = "✓" if r.conclusion_match else "✗"
         if not r.conclusion_match:
             mismatches += 1
+            structural += 1  # conclusions default to structural
         print(f"  {status} C:  {r.conclusion}")
         if not r.conclusion_match:
             print(f"       FOL: {r.conclusion_fol}")
@@ -370,16 +408,21 @@ def print_report(results: list[ClaimcheckResult]) -> None:
     print(f"\n{'='*60}")
     print(f"Total statements: {total}")
     print(f"Faithful: {total - mismatches}")
-    print(f"Discrepancies: {mismatches}")
+    print(f"Structural errors: {structural}")
+    print(f"Surface noise: {surface}")
     if total:
-        print(f"Faithfulness rate: {(total - mismatches) / total:.0%}")
+        print(f"Faithfulness rate (structural only): {(total - structural) / total:.0%}")
+        print(f"Faithfulness rate (all discrepancies): {(total - mismatches) / total:.0%}")
 
 
 def print_summary(results: list[ClaimcheckResult], mode: str) -> dict:
     """Print summary stats and return them."""
     total = 0
     mismatches = 0
-    categories: dict[str, int] = {}
+    structural = 0
+    surface = 0
+    structural_cats: dict[str, int] = {}
+    surface_cats: dict[str, int] = {}
 
     for r in results:
         for pr in r.premise_results:
@@ -387,25 +430,43 @@ def print_summary(results: list[ClaimcheckResult], mode: str) -> dict:
             if not pr.match:
                 mismatches += 1
                 cat = pr.category or "unknown"
-                categories[cat] = categories.get(cat, 0) + 1
+                if pr.severity == "surface":
+                    surface += 1
+                    surface_cats[cat] = surface_cats.get(cat, 0) + 1
+                else:
+                    structural += 1
+                    structural_cats[cat] = structural_cats.get(cat, 0) + 1
         total += 1  # conclusion
         if not r.conclusion_match:
             mismatches += 1
+            structural += 1
 
     print(f"\n{'='*60}")
     print(f"Claimcheck Summary (mode={mode})")
     print(f"{'='*60}")
     print(f"Total statements: {total}")
     print(f"Faithful: {total - mismatches}")
-    print(f"Discrepancies: {mismatches}")
+    print(f"Structural errors: {structural}")
+    print(f"Surface noise: {surface}")
     if total:
-        print(f"Faithfulness rate: {(total - mismatches) / total:.0%}")
-    if categories:
-        print(f"\nDiscrepancy categories:")
-        for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
+        print(f"Faithfulness rate (structural only): {(total - structural) / total:.0%}")
+        print(f"Faithfulness rate (all discrepancies): {(total - mismatches) / total:.0%}")
+    if structural_cats:
+        print(f"\nStructural categories:")
+        for cat, count in sorted(structural_cats.items(), key=lambda x: -x[1]):
+            print(f"  {cat}: {count}")
+    if surface_cats:
+        print(f"\nSurface categories:")
+        for cat, count in sorted(surface_cats.items(), key=lambda x: -x[1]):
             print(f"  {cat}: {count}")
 
-    return {'total': total, 'faithful': total - mismatches, 'discrepancies': mismatches, 'categories': categories}
+    return {
+        'total': total, 'faithful': total - mismatches,
+        'structural': structural, 'surface': surface,
+        'discrepancies': mismatches,
+        'structural_categories': structural_cats,
+        'surface_categories': surface_cats,
+    }
 
 
 def main(argv: list[str] | None = None) -> None:
