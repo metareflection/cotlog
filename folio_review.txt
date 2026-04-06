@@ -286,8 +286,8 @@ Claimed error: Wrong argument order: Winner(maurier, steinhauer) reads as 'the t
     v2 FOL:  ∀x (LeaderBoard(maurier, x) → Participate(maurier, x))
     v2 NL:   All people on the leaderboard of the 1992 du Maurier Classic participated in the 1992 du Maurier Classic.
 
-  [ ] Is this a real formalization error?
-  [ ] Which parts are fixed and which remain?
+  [Y] Is this a real formalization error?
+  [Y] Which parts are fixed and which remain?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 9: wrong_quantifier_koala
@@ -316,8 +316,8 @@ Claimed error: Operator precedence: MountainRange(pm) AND In(pm, NM) OR In(pm, T
     v2 FOL:  MountainRange(thePicurisMountains) ∧ (In(thePicurisMountains, newMexico) ⊕ In(thePicurisMountains, texas))
     v2 NL:   The Picuris Mountains are a mountain range in New Mexico or Texas.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 11: negation_inversion_mary_jobs
@@ -332,8 +332,8 @@ Claimed error: Negation inversion: predicate NotPicky negated in formula gives d
     v2 FOL:  (WorkIn(hannah, studentJob, campus) ∧ NeedToEarnMoneyToHelpPayFor(hannah, collegeTuition) → ¬(PickyEater(hannah) ∨ NeedToEarnMoneyToHelpPayFor(hannah, collegeTuition))
     v2 NL:   Hannah works in student jobs on campus and if she needs to earn money to help pay for her college tuition, then she is neither picky nor needs to earn money to help pay for her college tuition.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 12: xor_for_inclusive_or_subway
@@ -348,6 +348,6 @@ Claimed error: XOR for clearly inclusive-or: 'has a rating greater than 9 or is 
     v2 FOL:  ∀x (HaveRating(hamdenPlazaSubway, x) ∧ GreaterThan(x, 4) ⊕ PopularAmong(hamdenPlazaSubway, localResidents))
     v2 NL:   The Hamden Plaza Subway store has a rating greater than four, or it is popular among local residents.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the same error persist in v2?
+  [Y] Is this a real formalization error?
+  [Y] Does the same error persist in v2?
 
