@@ -476,17 +476,24 @@ def main(argv: list[str] | None = None) -> None:
                         help='llm: formalize then round-trip; gold: use gold FOL annotations')
     parser.add_argument('--data', type=Path, default=None,
                         help='JSONL file (default: FOLIO validation set)')
+    parser.add_argument('--dataset', choices=['v1', 'v2'], default=None,
+                        help='FOLIO dataset version (v1 or v2); overrides --data')
     parser.add_argument('--model', type=str, default=None, help='LLM model name')
     parser.add_argument('--limit', type=int, default=None, help='Max examples')
     parser.add_argument('--output-dir', type=Path, default=Path('results'), help='Output directory')
     parser.add_argument('--verbose', '-v', action='store_true')
     args = parser.parse_args(argv)
 
-    from .folio import load_folio
-    kwargs = {}
-    if args.data:
-        kwargs['path'] = args.data
-    examples = load_folio(**kwargs)
+    from .folio import load_folio, FOLIO_VALIDATION, FOLIO_V2_VALIDATION
+    if args.dataset == 'v2':
+        path = FOLIO_V2_VALIDATION
+    elif args.dataset == 'v1':
+        path = FOLIO_VALIDATION
+    elif args.data:
+        path = args.data
+    else:
+        path = FOLIO_VALIDATION
+    examples = load_folio(path)
     if args.limit:
         examples = examples[:args.limit]
 
