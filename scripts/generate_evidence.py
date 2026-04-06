@@ -88,6 +88,7 @@ PATTERNS = [
         "error": "De Morgan error in conclusion: 'neither A nor B' = (not A) AND (not B), but FOL has (not A) OR (not B).",
         "v2_status": "fixed",
         "v2_notes": "Conclusion FOL now correctly uses (not A) AND (not B).",
+        "v2_override_index": 72,
     },
     {
         "pattern_id": "4a",
@@ -115,6 +116,7 @@ PATTERNS = [
         "error": "Statement misalignment: P2's FOL is for P1 (cost relationship), P3's is for P2 (hardship -> aid), P4's is for P3 (definition of hardship), P5's is for P4 (Tom's family).",
         "v2_status": "fixed",
         "v2_notes": "Problem restructured; all FOLs aligned.",
+        "v2_override_index": 104,
     },
     {
         "pattern_id": "4d",
@@ -236,10 +238,14 @@ def main():
                     "v1_fol": premises_fol[pidx].strip(),
                 })
 
-        # Find v2 match
-        if v1_idx not in v2_cache:
+        # Find v2 match — use override if provided, else fuzzy match
+        if "v2_override_index" in pat:
+            v2_match = v2_data[pat["v2_override_index"]]
+        elif v1_idx not in v2_cache:
             v2_cache[v1_idx] = find_v2_match(v1_ex, v2_data)
-        v2_match = v2_cache[v1_idx]
+            v2_match = v2_cache[v1_idx]
+        else:
+            v2_match = v2_cache[v1_idx]
 
         # Add v2 data to affected premises — match by NL text, not index
         for a in affected:

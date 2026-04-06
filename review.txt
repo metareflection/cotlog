@@ -63,6 +63,8 @@ Claimed error: De Morgan error in conclusion: 'neither A nor B' = (not A) AND (n
   conclusion:
     NL:      If KO is a growth company’s stock or if its price is volatile, then KO is neither a company’s stock nor is its price volatile.
     FOL:     GrowthCompanies’Stocks(kO) ∨ PriceVolatile(kO) → ¬Companies’Stocks(kO) ∨ ¬PriceVolatile(kO)
+    v2 FOL:  GrowthStock(kO) ∨ BoughtToEarnProfitFrom(kO, earnProfit, rapidPriceAppreciation) → ¬Stock(kO) ∧ ¬BoughtToEarnProfitFrom(kO, rapidPriceAppreciation)
+    v2 NL:   If KO is a growth stock or bought to earn profits from rapid price appreciation, then KO is neither a stock nor is its price volatile.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
@@ -163,6 +165,8 @@ Claimed error: Statement misalignment: P2's FOL is for P1 (cost relationship), P
   P1:
     NL:      ETS provides financial aid to those GRE applicants who prove economic hardship.
     FOL:     ∀x (Cost205(x) → CostBelow300(x))
+    v2 FOL:  ∀x (ApplicantOf(x, gre) ∧ Prove(x, economicHardship) → ProvideTo(ets, financialAid, x))
+    v2 NL:   ETS provides financial aid to those GRE applicants who prove economic hardship.
 
   P2:
     NL:      Economic hardship refers to difficulty caused by having too little money or too few resources.
@@ -171,10 +175,14 @@ Claimed error: Statement misalignment: P2's FOL is for P1 (cost relationship), P
   P3:
     NL:      Tom lives in a single-parent family.
     FOL:     ∀x (SingleParent(x) ∨ FewResources(x) → Hardship(x))
+    v2 FOL:  LivingIn(tom, singleParentFamily)
+    v2 NL:   Tom lives in a single-parent family.
 
   P4:
     NL:      His dad has been out of work for more than a year.
     FOL:     SingleParent(tom)
+    v2 FOL:  OutOfWork(tomsDad) ∧ AvailableTo(fewResources, tom)
+    v2 NL:   Tom's dad has been out of work, and Tom has few resources available to them.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
