@@ -211,8 +211,11 @@ def main():
                 if pos == "conclusion":
                     actual_v2_fol = v2_ex["conclusion-FOL"].strip()
                 else:
-                    pidx = int(pos[1:])
-                    actual_v2_fol = v2_fols[pidx].strip() if pidx < len(v2_fols) else "[OUT OF RANGE]"
+                    # Use v2_premise_idx if available (NL-matched), fall back to positional
+                    v2_pidx = stmt.get("v2_premise_idx")
+                    if v2_pidx is None:
+                        v2_pidx = int(pos[1:])
+                    actual_v2_fol = v2_fols[v2_pidx].strip() if v2_pidx < len(v2_fols) else "[OUT OF RANGE]"
 
                 v2_fol_match = actual_v2_fol == claimed_v2_fol
                 if v2_fol_match:

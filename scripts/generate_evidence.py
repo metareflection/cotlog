@@ -241,10 +241,11 @@ def main():
             v2_cache[v1_idx] = find_v2_match(v1_ex, v2_data)
         v2_match = v2_cache[v1_idx]
 
-        # Add v2 data to affected premises
+        # Add v2 data to affected premises — match by NL text, not index
         for a in affected:
             a["v2_fol"] = None
             a["v2_nl"] = None
+            a["v2_premise_idx"] = None
             if v2_match is None:
                 continue
             v2_premises = to_list(v2_match["premises"])
@@ -253,11 +254,20 @@ def main():
                 a["v2_nl"] = v2_match["conclusion"]
                 a["v2_fol"] = v2_match["conclusion-FOL"]
             else:
-                pidx = int(a["position"][1:])
-                if pidx < len(v2_premises):
-                    a["v2_nl"] = v2_premises[pidx].strip()
-                if pidx < len(v2_fols):
-                    a["v2_fol"] = v2_fols[pidx].strip()
+                # Find the v2 premise that best matches the v1 NL text
+                v1_nl = a["v1_nl"].strip()
+                best_idx = None
+                best_score = 0
+                for j, v2_p in enumerate(v2_premises):
+                    s = similarity(v1_nl, v2_p.strip())
+                    if s > best_score:
+                        best_score = s
+                        best_idx = j
+                if best_idx is not None and best_score > 0.5:
+                    a["v2_premise_idx"] = best_idx
+                    a["v2_nl"] = v2_premises[best_idx].strip()
+                    if best_idx < len(v2_fols):
+                        a["v2_fol"] = v2_fols[best_idx].strip()
 
         record = {
             "pattern_id": pat["pattern_id"],

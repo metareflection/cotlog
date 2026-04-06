@@ -33,8 +33,8 @@ Claimed error: De Morgan error: 'cannot be from Earth and from Mars' means not(A
   P4:
     NL:      Marvin cannot be from Earth and from Mars.
     FOL:     ¬FromEarth(marvin) ∧ ¬FromMars(marvin)
-    v2 FOL:  HighlyIntelligentBeing(marvin)
-    v2 NL:   Marvin is a highly intelligent being.
+    v2 FOL:  ¬(From(marvin, earth) ⊕ From(marvin, mars))
+    v2 NL:   Marvin is either from Earth and from Mars, or he is from neither.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
@@ -77,20 +77,20 @@ Claimed error: Statement misalignment: P1 NL was split across two lines in sourc
   P1:
     NL:      turkey, Rio Grande wild turkey, and Ocellated wild turkey.
     FOL:     ¬(WildTurkey(tom) ∧ Eastern(tom))
-    v2 FOL:  ¬(EasternWildTurkey(tom))
-    v2 NL:   Tom is not an Eastern wild turkey.
+    v2 FOL:  ¬(OsceolaWildTurkey(tom))
+    v2 NL:   Tom is not an Osceola wild turkey.
 
   P2:
     NL:      Tom is not an Eastern wild turkey.
     FOL:     ¬(WildTurkey(tom) ∧ Osceola(tom))
-    v2 FOL:  ¬(OsceolaWildTurkey(tom))
-    v2 NL:   Tom is not an Osceola wild turkey.
+    v2 FOL:  ¬(EasternWildTurkey(tom))
+    v2 NL:   Tom is not an Eastern wild turkey.
 
   P3:
     NL:      Tom is not an Osceola wild turkey.
     FOL:     WildTurkey(tom) → ¬(Goulds(tom) ∨ Merriams(tom) ∨ Riogrande(tom))
-    v2 FOL:  ¬(GouldsWildTurkey(tom))
-    v2 NL:   Tom is not a Gould's wild turkey.
+    v2 FOL:  ¬(OsceolaWildTurkey(tom))
+    v2 NL:   Tom is not an Osceola wild turkey.
 
   P4:
     NL:      Tom is also not a Gould's wild turkey, or a Merriam's wild turkey, or a Rio Grande wild turkey.
@@ -141,14 +141,14 @@ Claimed error: Statement misalignment: starting at P3, each FOL formula correspo
   P7:
     NL:      Tom will rent an apartment in a managed building if and only if he is allowed to move in with Fluffy, and the security deposit is no more than $1500.
     FOL:     Rent2000(oliveGarden)
-    v2 FOL:  MoreThan(uSD2000, uSD1500)
-    v2 NL:   $2000 is more than $1500.
+    v2 FOL:  ∀x ∀y (ManagedBuilding(x) ∧ AllowedToMoveInWith(tom, x, fluffy) ∧ SecurityDeposit(y) ∧ ¬MoreThan(y, uSD1500) → RentApartmentIn(tom, x))
+    v2 NL:   Tom will rent an apartment in a managed building if he is allowed to move in with Fluffy, and the security deposit is no more than $1500.
 
   P8:
     NL:      2000$ is more than $1500.
     FOL:     ∀x (TomRent(x) ↔ (ManagedBuilding(x) ∧ AllowPet(x) ∧ DepositNoMoreThan1500(x)))
-    v2 FOL:  ∀x ∀y (ManagedBuilding(x) ∧ AllowedToMoveInWith(tom, x, fluffy) ∧ SecurityDeposit(y) ∧ ¬MoreThan(y, uSD1500) → RentApartmentIn(tom, x))
-    v2 NL:   Tom will rent an apartment in a managed building if he is allowed to move in with Fluffy, and the security deposit is no more than $1500.
+    v2 FOL:  MoreThan(uSD2000, uSD1500)
+    v2 NL:   $2000 is more than $1500.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
@@ -189,20 +189,18 @@ Claimed error: Statement misalignment: starting at P4, each FOL corresponds to a
   P3:
     NL:      If people have good relationships with their parents, then they fulfill their nutritional daily intakes.
     FOL:     ∀x (GoodRelationship(x) → ¬HealthyHabits(x))
-    v2 FOL:  ∀x (Disregard(x, physicalWellbeing) → ¬(ConsciousAbout(x, health) ∧ ConsciousAbout(x, eatingHabit)))
-    v2 NL:   All people who disregard their physical well-being are not very conscious about their health and eating habits.
+    v2 FOL:  ∀x (VisitDaily(x, gym) → Fulfill(x, dailyNutritionalIntake))
+    v2 NL:   If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
 
   P4:
     NL:      If people have good relationships with their parents, then they do not eat salads regularly.
     FOL:     ∀x (Gym(x) → Nutritional(x))
-    v2 FOL:  ∀x (VisitDaily(x, gym) → Fulfill(x, dailyNutritionalIntake))
-    v2 NL:   If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
 
   P5:
     NL:      If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
     FOL:     (HealthyChildhood(taylor) ∧ GoodRelationship(taylor)) ∨ ¬HealthyChildhood(taylor) ∧ ¬GoodRelationship(marcy)
-    v2 FOL:  ¬(GrowUpIn(taylor, health-consciousChildhoodHome) ⊕ Disregard(taylor, physicalWellbeing))
-    v2 NL:   Taylor either grew up in a health-conscious childhood home and disregard her physical well-being, or she did neither.
+    v2 FOL:  ∀x (VisitDaily(x, gym) → Fulfill(x, dailyNutritionalIntake))
+    v2 NL:   If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
@@ -323,8 +321,8 @@ Claimed error: Negation inversion: predicate NotPicky negated in formula gives d
   P5:
     NL:      If Mary works in student jobs on campus and needs to earn money to help pay for her college tuition, then Mary is neither picky nor needs to earn money to help pay for her college tuition.
     FOL:     StudentJobs(mary) ∧ Tuition(mary) → ¬(NotPicky(mary) ∨ Tuition(mary))
-    v2 FOL:  At(hannah, marysSchool)
-    v2 NL:   Hannah is at Mary's school.
+    v2 FOL:  (WorkIn(hannah, studentJob, campus) ∧ NeedToEarnMoneyToHelpPayFor(hannah, collegeTuition) → ¬(PickyEater(hannah) ∨ NeedToEarnMoneyToHelpPayFor(hannah, collegeTuition))
+    v2 NL:   Hannah works in student jobs on campus and if she needs to earn money to help pay for her college tuition, then she is neither picky nor needs to earn money to help pay for her college tuition.
 
   [ ] Is this a real formalization error?
   [ ] Does the v2 FOL resolve the error?
