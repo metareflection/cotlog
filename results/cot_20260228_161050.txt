@@ -1,0 +1,24 @@
+
+============================================================
+FOLIO Evaluation Report (mode=cot)
+============================================================
+Total:    5
+Correct:  3
+Errors:   0
+Accuracy: 60.0%
+
+CoT Step-Level Stats:
+  Total steps:    51
+  Verified steps: 50
+  Step verify rate: 98.0%
+  LLM answer accuracy: 100.0%
+
+Confusion Matrix (rows=gold, cols=predicted):
+                    True       False   Uncertain       Error
+        True           0           0           1           0
+       False           0           0           1           0
+   Uncertain           0           0           3           0
+
+Mismatches (2):
+  [  1] gold=True       pred=Uncertain  If Bonnie is either both a young child or teenager who wishes to further her academic career and educational opportunities and chaperones high school dances or neither is a young child nor teenager who wishes to further her academic career and educational opportunities, then Bonnie is either a student who attends the school or is an inactive and disinterested member of the community.
+  [  2] gold=False      pred=Uncertain  If Bonnie either chaperones high school dances or, if she does not, she performs in school talent shows often, then Bonnie is both a young child or teenager who wishes to further her academic career and educational opportunities and an inactive and disinterested member of the community.

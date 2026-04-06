@@ -1,0 +1,16 @@
+
+============================================================
+FOLIO Evaluation Report (mode=cot)
+============================================================
+Total:    5
+Errors:   0
+
+Verification Summary:
+  Fully verified:      2/5  (40%)
+  Conclusion verified: 2/5  (40%)
+
+Step-Level Stats:
+  Total steps:         57
+  Verified steps:      56
+  Step verify rate:    98.2%
+  Avg rounds/example:  1.6

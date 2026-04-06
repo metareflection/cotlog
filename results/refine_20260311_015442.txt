@@ -1,0 +1,20 @@
+
+============================================================
+FOLIO Evaluation Report (mode=refine)
+============================================================
+Total:    10
+Errors:   0
+
+Refinement Summary:
+  Stability improved:  4/10  (40%)
+  Avg ΔS:              +12.1%
+  [  0] structural: 100%→100%  entailment: 100%→100%  (iters=0)
+  [  1] structural: 92%→92%  entailment: 80%→80%  (iters=0)
+  [  2] structural: 100%→100%  entailment: 100%→100%  (iters=0)
+  [  3] structural: 54%→100%  entailment: 100%→100%  (iters=1)
+  [  4] structural: 100%→100%  entailment: 100%→100%  (iters=0)
+  [  5] structural: 60%→100%  entailment: 100%→100%  (iters=2)
+  [  6] structural: 100%→100%  entailment: 100%→100%  (iters=0)
+  [  7] structural: 87%→100%  entailment: 80%→100%  (iters=1)
+  [  8] structural: 100%→100%  entailment: 100%→100%  (iters=0)
+  [  9] structural: 78%→100%  entailment: 80%→100%  (iters=1)

@@ -1,0 +1,13 @@
+
+============================================================
+FOLIO Evaluation Report (mode=refine)
+============================================================
+Total:    3
+Errors:   0
+
+Refinement Summary:
+  Stability improved:  0/3  (0%)
+  Avg ΔS:              +0.0%
+  [  0] S0=100% → Sf=100% (ΔS=+0%, iters=0)
+  [  1] S0=100% → Sf=100% (ΔS=+0%, iters=0)
+  [  2] S0=100% → Sf=100% (ΔS=+0%, iters=0)

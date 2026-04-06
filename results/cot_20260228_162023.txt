@@ -1,0 +1,20 @@
+
+============================================================
+FOLIO Evaluation Report (mode=cot)
+============================================================
+Total:    5
+Correct:  5
+Errors:   0
+Accuracy: 100.0%
+
+CoT Step-Level Stats:
+  Total steps:    55
+  Verified steps: 55
+  Step verify rate: 100.0%
+  LLM answer accuracy: 100.0%
+
+Confusion Matrix (rows=gold, cols=predicted):
+                    True       False   Uncertain       Error
+        True           1           0           0           0
+       False           0           1           0           0
+   Uncertain           0           0           3           0
