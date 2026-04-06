@@ -1,0 +1,347 @@
+FOLIO ERROR PATTERNS — HUMAN REVIEW CHECKLIST
+======================================================================
+
+For each pattern below, verify:
+  1. The FOL does not faithfully represent the NL (i.e., it's a real bug)
+  2. The v2 status is correct (fixed / removed / not fixed)
+
+Mark each with: [Y] confirmed  [N] not a real error  [?] uncertain
+
+──────────────────────────────────────────────────────────────────────
+Pattern 1: xor_for_biconditional
+v2 status: fixed
+v1 examples: [3, 4, 5] (0-indexed in folio-validation.jsonl)
+
+Claimed error: XOR used where biconditional is meant. NL says 'either (manager AND appears) or (neither)' = A <-> B. FOL uses A XOR B, which has opposite truth values.
+
+  P6:
+    NL:      James is either a manager and appears in the company today or neither a manager nor appears in the company today.
+    FOL:     Manager(james) ⊕ AppearInCompany(james)
+    v2 FOL:  ¬(Manager(james) ⊕ AppearIn(james, company))
+    v2 NL:   James will appear in the company today if and only if he is a manager.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 2: de_morgan_marvin
+v2 status: fixed
+v1 examples: [27, 28, 29] (0-indexed in folio-validation.jsonl)
+
+Claimed error: De Morgan error: 'cannot be from Earth and from Mars' means not(A AND B), but FOL has (not A) AND (not B) — from neither, which is strictly stronger.
+
+  P4:
+    NL:      Marvin cannot be from Earth and from Mars.
+    FOL:     ¬FromEarth(marvin) ∧ ¬FromMars(marvin)
+    v2 FOL:  HighlyIntelligentBeing(marvin)
+    v2 NL:   Marvin is a highly intelligent being.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 2b: de_morgan_wedding_paris
+v2 status: removed
+v1 examples: [128, 129, 130, 131] (0-indexed in folio-validation.jsonl)
+
+Claimed error: De Morgan error in P5: NL consequent is 'does not travel to Paris AND does not have a wedding' = (not A) AND (not B). Gold FOL has not(A AND B) = not both, which is weaker. Also P6 uses XOR where inclusive-or is meant.
+
+  P4:
+    NL:      If John has at least one child, then John does not travel to Paris for his honeymoon and does not have a wedding.
+    FOL:     Child(john) → ¬(Paris(john) ∧ Wedding(john))
+
+  [ ] Is this a real formalization error?
+  [ ] (No v2 check needed — example was removed)
+
+──────────────────────────────────────────────────────────────────────
+Pattern 3: de_morgan_conclusion_ko
+v2 status: fixed
+v1 examples: [73] (0-indexed in folio-validation.jsonl)
+
+Claimed error: De Morgan error in conclusion: 'neither A nor B' = (not A) AND (not B), but FOL has (not A) OR (not B).
+
+  conclusion:
+    NL:      If KO is a growth company’s stock or if its price is volatile, then KO is neither a company’s stock nor is its price volatile.
+    FOL:     GrowthCompanies’Stocks(kO) ∨ PriceVolatile(kO) → ¬Companies’Stocks(kO) ∨ ¬PriceVolatile(kO)
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 4a: misalignment_wild_turkeys
+v2 status: fixed
+v1 examples: [9, 10, 11] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Statement misalignment: P1 NL was split across two lines in source data, so every subsequent FOL is shifted by one position. P6 ('Tom is a wild turkey') has no FOL at all.
+
+  P1:
+    NL:      turkey, Rio Grande wild turkey, and Ocellated wild turkey.
+    FOL:     ¬(WildTurkey(tom) ∧ Eastern(tom))
+    v2 FOL:  ¬(EasternWildTurkey(tom))
+    v2 NL:   Tom is not an Eastern wild turkey.
+
+  P2:
+    NL:      Tom is not an Eastern wild turkey.
+    FOL:     ¬(WildTurkey(tom) ∧ Osceola(tom))
+    v2 FOL:  ¬(OsceolaWildTurkey(tom))
+    v2 NL:   Tom is not an Osceola wild turkey.
+
+  P3:
+    NL:      Tom is not an Osceola wild turkey.
+    FOL:     WildTurkey(tom) → ¬(Goulds(tom) ∨ Merriams(tom) ∨ Riogrande(tom))
+    v2 FOL:  ¬(GouldsWildTurkey(tom))
+    v2 NL:   Tom is not a Gould's wild turkey.
+
+  P4:
+    NL:      Tom is also not a Gould's wild turkey, or a Merriam's wild turkey, or a Rio Grande wild turkey.
+    FOL:     WildTurkey(tom)
+    v2 FOL:  ¬(MerriamsWildTurkey(tom) ∨ RiograndeWildTurkey(tom))
+    v2 NL:   Tom is neither a Merriam's wild turkey nor a Rio Grande wild turkey.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 4b: misalignment_rental_cat
+v2 status: fixed
+v1 examples: [93] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Statement misalignment: starting at P3, each FOL formula corresponds to a later premise. P4's FOL (Cat(fluffy)) is P5's intended formula, etc.
+
+  P2:
+    NL:      The security deposit can be either equal to one month's rent or more.
+    FOL:     ∀x (Rent2000(x) ↔ ¬DepositNoMoreThan1500(x))
+    v2 FOL:  ∀x ∀y ∀z (SecurityDeposit(x) ∧ ManagedBuilding(z) ∧ MonthlyRentAt(y, z) → (MoreThan(x, y) ⊕ Equal(x, y))
+    v2 NL:   The security deposit can be either equal to the monthly rent at a managed building or more.
+
+  P3:
+    NL:      Fluffy is Tom's cat.
+    FOL:     ∀x (Rent2000(x) ↔ DepositNoLessThan2000(x))
+    v2 FOL:  Cat(fluffy) ∧ BelongTo(fluffy, tom)
+    v2 NL:   Fluffy is Tom's cat.
+
+  P4:
+    NL:      Cats are pets.
+    FOL:     Cat(fluffy)
+    v2 FOL:  ∀x (Cat(x) → Pet(x))
+    v2 NL:   Cats are pets.
+
+  P5:
+    NL:      The Olive Garden is a managed building.
+    FOL:     ∀x (Cat(x) → Pet(x))
+    v2 FOL:  ManagedBuilding(oliveGarden)
+    v2 NL:   The Olive Garden is a managed building.
+
+  P6:
+    NL:      The monthly rent at the Olive Garden is $2000.
+    FOL:     ManagedBuilding(oliveGarden)
+    v2 FOL:  MonthlyRentAt(uSD2000, oliveGarden)
+    v2 NL:   The monthly rent at the Olive Garden is $2000.
+
+  P7:
+    NL:      Tom will rent an apartment in a managed building if and only if he is allowed to move in with Fluffy, and the security deposit is no more than $1500.
+    FOL:     Rent2000(oliveGarden)
+    v2 FOL:  MoreThan(uSD2000, uSD1500)
+    v2 NL:   $2000 is more than $1500.
+
+  P8:
+    NL:      2000$ is more than $1500.
+    FOL:     ∀x (TomRent(x) ↔ (ManagedBuilding(x) ∧ AllowPet(x) ∧ DepositNoMoreThan1500(x)))
+    v2 FOL:  ∀x ∀y (ManagedBuilding(x) ∧ AllowedToMoveInWith(tom, x, fluffy) ∧ SecurityDeposit(y) ∧ ¬MoreThan(y, uSD1500) → RentApartmentIn(tom, x))
+    v2 NL:   Tom will rent an apartment in a managed building if he is allowed to move in with Fluffy, and the security deposit is no more than $1500.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 4c: misalignment_gre_ets
+v2 status: fixed
+v1 examples: [105, 106, 107] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Statement misalignment: P2's FOL is for P1 (cost relationship), P3's is for P2 (hardship -> aid), P4's is for P3 (definition of hardship), P5's is for P4 (Tom's family).
+
+  P1:
+    NL:      ETS provides financial aid to those GRE applicants who prove economic hardship.
+    FOL:     ∀x (Cost205(x) → CostBelow300(x))
+
+  P2:
+    NL:      Economic hardship refers to difficulty caused by having too little money or too few resources.
+    FOL:     ∀x (Hardship(x) → FinancialAid(x))
+
+  P3:
+    NL:      Tom lives in a single-parent family.
+    FOL:     ∀x (SingleParent(x) ∨ FewResources(x) → Hardship(x))
+
+  P4:
+    NL:      His dad has been out of work for more than a year.
+    FOL:     SingleParent(tom)
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 4d: misalignment_salad_health
+v2 status: fixed
+v1 examples: [173, 174, 175] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Statement misalignment: starting at P4, each FOL corresponds to a different/later premise. P4's FOL negates HealthyHabits (P5's meaning), P5's FOL is about gym (P6's meaning).
+
+  P3:
+    NL:      If people have good relationships with their parents, then they fulfill their nutritional daily intakes.
+    FOL:     ∀x (GoodRelationship(x) → ¬HealthyHabits(x))
+    v2 FOL:  ∀x (Disregard(x, physicalWellbeing) → ¬(ConsciousAbout(x, health) ∧ ConsciousAbout(x, eatingHabit)))
+    v2 NL:   All people who disregard their physical well-being are not very conscious about their health and eating habits.
+
+  P4:
+    NL:      If people have good relationships with their parents, then they do not eat salads regularly.
+    FOL:     ∀x (Gym(x) → Nutritional(x))
+    v2 FOL:  ∀x (VisitDaily(x, gym) → Fulfill(x, dailyNutritionalIntake))
+    v2 NL:   If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
+
+  P5:
+    NL:      If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
+    FOL:     (HealthyChildhood(taylor) ∧ GoodRelationship(taylor)) ∨ ¬HealthyChildhood(taylor) ∧ ¬GoodRelationship(marcy)
+    v2 FOL:  ¬(GrowUpIn(taylor, health-consciousChildhoodHome) ⊕ Disregard(taylor, physicalWellbeing))
+    v2 NL:   Taylor either grew up in a health-conscious childhood home and disregard her physical well-being, or she did neither.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 5: semantic_mismatch_mia_emma
+v2 status: fixed
+v1 examples: [46, 47, 48] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Semantic mismatch: 'Mia's favorite season is not the same as Emma's' should compare seasons, but FOL has not(Love(mia, emma)) — 'Mia does not love Emma' — completely different relation.
+
+  P3:
+    NL:      Mia's favorite season is not the same as Emma's.
+    FOL:     ¬Love(mia, emma)
+    v2 FOL:  ∀x ∀y (Season(x) ∧ Season(y) ∧ Favorite(mia, x) ∧ Favorite(emma, y) → ¬(x=y))
+    v2 NL:   Mia's favorite season is not the same as Emma's.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 6: converse_implication_beethoven
+v2 status: fixed
+v1 examples: [36, 37, 38] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Converse implication: 'Composers write music' means Composer(y) -> exists x (writes(y,x)). Gold FOL says: if x is written by y, then y is a composer — the converse.
+
+  P1:
+    NL:      Composers write music pieces.
+    FOL:     ∀x ∀y ((MusicPiece(x) ∧ Writtenby(x, y)) → Composer(y))
+    v2 FOL:  ∀x (MusicPiece(x) → ∃y (Composer(y) ∧ Write(y, x)))
+    v2 NL:   Composers write music pieces.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 7: wrong_arity_karen_share
+v2 status: fixed
+v1 examples: [21, 22, 23] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Wrong arity: Share(x, lisa) is 2-ary, dropping Karen as the agent. Should be Share(karen, x, lisa). FOL says 'x is shared with Lisa' rather than 'Karen shares x with Lisa'.
+
+  P5:
+    NL:      If Karen binge-watches a Netflix show, she will share it to Lisa.
+    FOL:     ∀x ((NetflixShow(x) ∧ BingeWatch(karen, x)) → Share(x, lisa))
+    v2 FOL:  ∀x ((NetflixShow(x) ∧ BingeWatch(karen, x)) → ShareWith(karen, x, lisa))
+    v2 NL:   If Karen binge-watches a Netflix show, she will share it with Lisa.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 8: wrong_arity_order_du_maurier
+v2 status: partially_fixed
+v1 examples: [194, 195, 196] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Wrong argument order: Winner(maurier, steinhauer) reads as 'the tournament won the player'. Participate(maurier, steinhauer) reads as 'the tournament participated with the player'. Arguments are reversed.
+
+  P0:
+    NL:      The winner of the 1992 du Maurier Classic was Steinhauer.
+    FOL:     Winner(maurier, steinhauer)
+    v2 FOL:  WinnerOf(steinhauer, duMaurierClassic, year1992)
+    v2 NL:   The winner of the 1992 du Maurier Classic was Steinhauer.
+
+  P1:
+    NL:      Steinhauer participated in the 1992 du Maurier Classic.
+    FOL:     Participate(maurier, steinhauer)
+    v2 FOL:  Participate(duMaurierClassic, steinhauer, year1992)
+    v2 NL:   Steinhauer participated in the 1992 du Maurier Classic.
+
+  P4:
+    NL:      All people on the leaderboard of the 1992 du Maurier Classic participated in the 1992 du Maurier Classic.
+    FOL:     ∀x (LeaderBoard(maurier, x) → Participate(maurier, x))
+    v2 FOL:  ∀x (LeaderBoard(maurier, x) → Participate(maurier, x))
+    v2 NL:   All people on the leaderboard of the 1992 du Maurier Classic participated in the 1992 du Maurier Classic.
+
+  [ ] Is this a real formalization error?
+  [ ] Which parts are fixed and which remain?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 9: wrong_quantifier_koala
+v2 status: removed
+v1 examples: [96, 97, 98] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Wrong quantifier: 'if a koala is very fluffy' and 'Koalas love to sleep' use universal quantification in NL, but FOL uses 'koala' as a constant (a specific individual named koala).
+
+  P5:
+    NL:      If a koala is very fluffy, then the koala is not a quokka.
+    FOL:     VeryFluffy(koala) → ¬Quokka(koala)
+
+  [ ] Is this a real formalization error?
+  [ ] (No v2 check needed — example was removed)
+
+──────────────────────────────────────────────────────────────────────
+Pattern 10: operator_precedence_picuris
+v2 status: fixed
+v1 examples: [112, 113, 114] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Operator precedence: MountainRange(pm) AND In(pm, NM) OR In(pm, TX) — without parentheses, AND binds tighter, so MountainRange only applies to the NM branch. Should be MountainRange(pm) AND (In(pm, NM) OR In(pm, TX)).
+
+  P0:
+    NL:      The Picuris Mountains are a mountain range in New Mexico or Texas.
+    FOL:     MountainRange(picurismountains) ∧ In(picurismountains, newmexico) ∨ In(picurismountains, texas)
+    v2 FOL:  MountainRange(thePicurisMountains) ∧ (In(thePicurisMountains, newMexico) ⊕ In(thePicurisMountains, texas))
+    v2 NL:   The Picuris Mountains are a mountain range in New Mexico or Texas.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 11: negation_inversion_mary_jobs
+v2 status: fixed
+v1 examples: [76, 77, 78] (0-indexed in folio-validation.jsonl)
+
+Claimed error: Negation inversion: predicate NotPicky negated in formula gives double negation, making Mary picky instead of not-picky. NL consequent 'neither picky nor needs money' = not(Picky) AND not(Tuition), but not(NotPicky) = Picky.
+
+  P5:
+    NL:      If Mary works in student jobs on campus and needs to earn money to help pay for her college tuition, then Mary is neither picky nor needs to earn money to help pay for her college tuition.
+    FOL:     StudentJobs(mary) ∧ Tuition(mary) → ¬(NotPicky(mary) ∨ Tuition(mary))
+    v2 FOL:  At(hannah, marysSchool)
+    v2 NL:   Hannah is at Mary's school.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the v2 FOL resolve the error?
+
+──────────────────────────────────────────────────────────────────────
+Pattern 12: xor_for_inclusive_or_subway
+v2 status: not_fixed
+v1 examples: [84, 85, 86] (0-indexed in folio-validation.jsonl)
+
+Claimed error: XOR for clearly inclusive-or: 'has a rating greater than 9 or is popular among local residents' uses XOR, but both can obviously be true simultaneously. P4 says popular -> rating > 9, so if popular, both are true — XOR would make this false.
+
+  P4:
+    NL:      Subway has a rating greater than 9 or is popular among local residents.
+    FOL:     RatingGreaterThan9(subway) ⊕ PopularAmongLocalResidents(subway)
+    v2 FOL:  ∀x (HaveRating(hamdenPlazaSubway, x) ∧ GreaterThan(x, 4) ⊕ PopularAmong(hamdenPlazaSubway, localResidents))
+    v2 NL:   The Hamden Plaza Subway store has a rating greater than four, or it is popular among local residents.
+
+  [ ] Is this a real formalization error?
+  [ ] Does the same error persist in v2?
+
