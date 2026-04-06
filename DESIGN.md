@@ -89,6 +89,10 @@ Gold and LLM modes report accuracy and confusion matrix. CoT mode reports verifi
 
 **`cot.py`** — Standalone CoT verification CLI. Takes arbitrary NL premises + conclusion (via flags or JSON file), runs the full CoT pipeline, prints human-readable or JSON output. Independent of any dataset.
 
+### Claimcheck
+
+**`claimcheck.py`** — Round-trip faithfulness verification of NL ↔ FOL. See [CLAIMCHECK.md](CLAIMCHECK.md) for the full design, discrepancy categories, and results.
+
 ## Data flow by mode
 
 ### Gold mode

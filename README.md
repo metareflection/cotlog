@@ -105,9 +105,14 @@ Verifies whether FOL formalizations faithfully capture the original NL by inform
 # Check LLM-generated FOL against original NL
 uv run python -m cotlog.claimcheck --mode llm --data examples/refine-examples.jsonl -v
 
-# Check FOLIO's gold FOL annotations against original NL
+# Check FOLIO v1 gold FOL annotations against original NL
 uv run python -m cotlog.claimcheck --mode gold --limit 20 -v
+
+# Check FOLIO v2 gold FOL annotations
+uv run python -m cotlog.claimcheck --mode gold --dataset v2 -v
 ```
+
+The `--dataset` flag selects between FOLIO versions: `v1` (original, 204 examples) or `v2` (revised, 203 examples). Defaults to v1 if omitted.
 
 ### Options
 
