@@ -100,8 +100,8 @@ Claimed error: Statement misalignment: P1 NL was split across two lines in sourc
     v2 FOL:  ¬(MerriamsWildTurkey(tom) ∨ RiograndeWildTurkey(tom))
     v2 NL:   Tom is neither a Merriam's wild turkey nor a Rio Grande wild turkey.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 4b: misalignment_rental_cat
@@ -152,8 +152,8 @@ Claimed error: Statement misalignment: starting at P3, each FOL formula correspo
     v2 FOL:  MoreThan(uSD2000, uSD1500)
     v2 NL:   $2000 is more than $1500.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 4c: misalignment_gre_ets
@@ -184,8 +184,8 @@ Claimed error: Statement misalignment: P2's FOL is for P1 (cost relationship), P
     v2 FOL:  OutOfWork(tomsDad) ∧ AvailableTo(fewResources, tom)
     v2 NL:   Tom's dad has been out of work, and Tom has few resources available to them.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 4d: misalignment_salad_health
@@ -210,8 +210,8 @@ Claimed error: Statement misalignment: starting at P4, each FOL corresponds to a
     v2 FOL:  ∀x (VisitDaily(x, gym) → Fulfill(x, dailyNutritionalIntake))
     v2 NL:   If people visit the gym at least once a day, then they always fulfill their daily nutritional intakes.
 
-  [ ] Is this a real formalization error?
-  [ ] Does the v2 FOL resolve the error?
+  [Y] Is this a real formalization error?
+  [Y] Does the v2 FOL resolve the error?
 
 ──────────────────────────────────────────────────────────────────────
 Pattern 5: semantic_mismatch_mia_emma
