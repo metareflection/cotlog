@@ -175,6 +175,23 @@ uv run python -m pytest tests/
 
 Gold FOL on FOLIO validation (204 examples): **91.2% accuracy** (186/204 correct, 8 parse errors from malformed data).
 
+### FOLIO annotation audit
+
+Running claimcheck on FOLIO's gold FOL annotations found formalization errors in both v1 and v2 of the dataset. Ten error patterns are documented in [FOLIO_REPORT.md](FOLIO_REPORT.md), with machine-readable evidence in `results/FOLIO_EVIDENCE.jsonl` and a human-reviewed checklist in [folio_review.txt](folio_review.txt).
+
+To reproduce:
+
+```bash
+# Generate evidence from v1 and v2 datasets
+uv run python scripts/generate_evidence.py
+
+# Mechanical verification (checks NL/FOL against actual datasets)
+uv run python scripts/verify_evidence.py
+
+# Human review checklist
+uv run python scripts/verify_evidence.py --human
+```
+
 ## Known limitations
 
 - **No equality support**: The FOL parser doesn't handle `=` or `≠`. LLM-generated steps using equality will fail to parse.
