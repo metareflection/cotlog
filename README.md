@@ -14,6 +14,7 @@ Fetch the FOLIO dataset:
 ```bash
 mkdir -p data
 git clone https://github.com/Yale-LILY/FOLIO data/folio
+uv run python scripts/download_folio_v2.py  # fetches v2 from HuggingFace
 ```
 
 For LLM modes (`llm`, `cot`), configure AWS credentials for Bedrock access (e.g. `aws sso login` or `~/.aws/credentials`).
